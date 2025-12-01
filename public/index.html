@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>last.fm corner</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      background: radial-gradient(circle at top, #201139 0, #05030a 60%);
+      color: #f9f5ff;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 12px;
+    }
+    .shell {
+      width: 100%;
+      max-width: 780px;
+      background: rgba(16, 9, 30, 0.96);
+      border-radius: 18px;
+      padding: 18px 18px 16px;
+      box-shadow: 0 20px 44px rgba(0, 0, 0, 0.85);
+      border: 1px solid rgba(248, 113, 113, 0.18);
+    }
+    .row { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+    input {
+      background:#05030a;
+      border-radius:999px;
+      border:1px solid rgba(148,163,184,.4);
+      color:#f9f5ff;
+      padding:6px 10px;
+      outline:none;
+    }
+    input:focus { border-color:#a855f7; }
+    button {
+      border-radius:999px;
+      border:none;
+      padding:6px 14px;
+      background:#fb7185;
+      color:#05030a;
+      cursor:pointer;
+    }
+    button:active { transform:translateY(1px); }
+    .error { color:#fca5a5; margin-top:6px; font-size:0.8rem; }
+    .pill { font-size:0.76rem; padding:3px 8px; border-radius:999px;
+            border:1px solid rgba(148,163,184,.4); }
+    .grid { margin-top:14px; display:grid; gap:10px; }
+    @media(min-width:720px){ .grid{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
+    .card {
+      background:#0b0714;
+      border-radius:14px;
+      padding:10px;
+      border:1px solid rgba(148,163,184,.18);
+      font-size:0.8rem;
+    }
+    .mono { font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas; font-size:0.8rem; }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <h1 style="font-size:1.2rem; margin-bottom:8px;">last.fm corner</h1>
+
+    <div class="row" id="form-row">
+      <input id="user" placeholder="enter last.fm username" />
+      <span id="captcha-label" class="mono"></span>
+      <input id="captcha-answer" placeholder="answer" style="width:70px;" />
+      <button id="go">enter</button>
+    </div>
+    <div id="error" class="error"></div>
+
+    <div id="summary" style="margin-top:12px; font-size:0.86rem; display:none;"></div>
+
+    <section id="visuals" class="grid" style="display:none;">
+      <div class="card">
+        <div class="mono">now playing</div>
+        <div id="now-playing" style="margin-top:4px;">—</div>
+      </div>
+      <div class="card">
+        <div class="mono">artists (top 3)</div>
+        <div id="top-artists" style="margin-top:4px;"></div>
+      </div>
+      <div class="card">
+        <div class="mono">last 5 tracks</div>
+        <ul id="recent-list" style="margin-top:4px; padding-left:16px;"></ul>
+      </div>
+      <div class="card">
+        <div class="mono">tempo</div>
+        <div id="pace" style="margin-top:4px;">—</div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const userInput   = document.getElementById("user");
+    const capLabel    = document.getElementById("captcha-label");
+    const capInput    = document.getElementById("captcha-answer");
+    const goBtn       = document.getElementById("go");
+    const errorEl     = document.getElementById("error");
+    const visuals     = document.getElementById("visuals");
+    const summaryEl   = document.getElementById("summary");
+    const nowPlayingEl= document.getElementById("now-playing");
+    const topArtistsEl= document.getElementById("top-artists");
+    const recentList  = document.getElementById("recent-list");
+    const paceEl      = document.getElementById("pace");
+
+    let a = 0, b = 0, op = "+";
+
+    function newCaptcha() {
+      a = Math.floor(Math.random() * 10) + 1;
+      b = Math.floor(Math.random() * 10) + 1;
+      op = Math.random() < 0.5 ? "+" : "-";
+      capLabel.textContent = `${a} ${op} ${b} = ?`;
+      capInput.value = "";
+    }
+
+    function checkCaptcha() {
+      const ans = Number(capInput.value.trim());
+      const correct = op === "+" ? a + b : a - b;
+      return ans === correct;
+    }
+
+    async function fetchLastfm(username) {
+      errorEl.textContent = "";
+      visuals.style.display = "none";
+      summaryEl.style.display = "none";
+      nowPlayingEl.textContent = "loading…";
+
+      try {
+        const res = await fetch(`/api/lastfm?username=${encodeURIComponent(username)}`);
+        if (!res.ok) {
+          errorEl.textContent = "could not reach last.fm right now.";
+          return;
+        }
+        const data = await res.json();
+        const tracks = data.tracks || [];
+
+        if (!tracks.length) {
+          errorEl.textContent = "no recent tracks found for that user.";
+          return;
+        }
+
+        // summary
+        const now = tracks.find(t => t.nowPlaying);
+        const last = tracks[0];
+        summaryEl.style.display = "block";
+        summaryEl.textContent =
+          `showing ${tracks.length} recent tracks for @${data.username}.`;
+
+
+        // now playing card
+        if (now) {
+          nowPlayingEl.textContent = `${now.artist} – ${now.title}`;
+        } else {
+          nowPlayingEl.textContent = `last played: ${last.artist} – ${last.title}`;
+        }
+
+        // top 3 artists (simple count)
+        const counts = {};
+        for (const t of tracks) {
+          if (!t.artist) continue;
+          counts[t.artist] = (counts[t.artist] || 0) + 1;
+        }
+        const top = Object.entries(counts)
+          .sort((a,b) => b[1]-a[1])
+          .slice(0,3);
+
+        topArtistsEl.innerHTML = "";
+        top.forEach(([name,count]) => {
+          const span = document.createElement("span");
+          span.className = "pill";
+          span.textContent = `${name} ×${count}`;
+          topArtistsEl.appendChild(span);
+        });
+
+        // last 5 tracks list
+        recentList.innerHTML = "";
+        tracks.slice(0,5).forEach(t => {
+          const li = document.createElement("li");
+          li.textContent = `${t.artist} – ${t.title}`;
+          recentList.appendChild(li);
+        });
+
+        // pace: minutes between first and last track with a date
+        const dated = tracks.filter(t => t.date);
+        if (dated.length >= 2) {
+          const minT = dated[dated.length - 1].date;
+          const maxT = dated[0].date;
+          const mins = Math.round((maxT - minT) / 60);
+          paceEl.textContent = `${mins} minutes between oldest and newest scrobble in this batch.`;
+        } else {
+          paceEl.textContent = "not enough timestamped tracks.";
+        }
+
+        visuals.style.display = "grid";
+      } catch (e) {
+        errorEl.textContent = "something broke while talking to last.fm.";
+      }
+    }
+
+    goBtn.addEventListener("click", () => {
+      const u = userInput.value.trim();
+      if (!u) {
+        errorEl.textContent = "enter a username first.";
+        return;
+      }
+      if (!checkCaptcha()) {
+        errorEl.textContent = "captcha didn’t match, try again.";
+        newCaptcha();
+        return;
+      }
+      fetchLastfm(u);
+      newCaptcha();
+    });
+
+    newCaptcha();
+  </script>
+</body>
+</html>
