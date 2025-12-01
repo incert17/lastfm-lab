@@ -18,24 +18,6 @@ const PERIOD_LABELS = {
   "overall":"overall"
 };
 
-function monthYearFromRegistered(registered) {
-  if (!registered) return null;
-  const txt = registered["#text"] || "";
-  const datePart = txt.split(" ")[0] || "";
-  const parts = datePart.split("-");
-  if (parts.length < 2) return null;
-  const year = Number(parts[0]);
-  const monthIdx = Number(parts[1]) - 1;
-  const monthNames = [
-    "january","february","march","april","may","june",
-    "july","august","september","october","november","december"
-  ];
-  return {
-    month: monthNames[monthIdx] || "",
-    year
-  };
-}
-
 function pickImage(images, preferred = "extralarge") {
   if (!Array.isArray(images)) return "";
   const exact = images.find(i => i.size === preferred && i["#text"]);
@@ -73,6 +55,7 @@ export default async function handler(req, res) {
 
   const API_KEY = process.env.LASTFM_API_KEY;
   if (!API_KEY) {
+    console.error("wrapped: LASTFM_API_KEY is missing");
     return res.status(500).json({ error: "missing_api_key" });
   }
 
@@ -90,31 +73,65 @@ export default async function handler(req, res) {
   ); // [web:324]
   const userInfoUrl   = params(
     `method=user.getInfo&user=${encodeURIComponent(username)}`
-  ); // [web:337][web:335]
+  ); // [web:337][web:335] (for logging only)
+
+  console.log("wrapped: starting", {
+    username,
+    period: safePeriod,
+    topTracksUrl,
+    topArtistsUrl,
+    userInfoUrl
+  });
 
   try {
-    // three core calls in parallel
     const [tracksRes, artistsRes, userRes] = await Promise.all([
       fetch(topTracksUrl),
       fetch(topArtistsUrl),
       fetch(userInfoUrl)
     ]);
 
-    async function safeJson(r) {
+    console.log("wrapped: response statuses", {
+      tracks: tracksRes.status,
+      artists: artistsRes.status,
+      user: userRes.status
+    });
+
+    async function safeJson(name, r) {
       try {
-        const j = await r.json();
-        if (j && j.error) return {};
+        const txt = await r.text();
+        if (!txt) {
+          console.warn(`wrapped: empty body from ${name}`);
+          return {};
+        }
+        let j;
+        try {
+          j = JSON.parse(txt);
+        } catch (parseErr) {
+          console.error(`wrapped: JSON parse error from ${name}`, parseErr, txt.slice(0, 200));
+          return {};
+        }
+        if (j && j.error) {
+          console.error(`wrapped: logical error from ${name}`, j);
+          return {};
+        }
         return j || {};
-      } catch {
+      } catch (err) {
+        console.error(`wrapped: safeJson failed for ${name}`, err);
         return {};
       }
     }
 
     const [tracksJson, artistsJson, userJson] = await Promise.all([
-      safeJson(tracksRes),
-      safeJson(artistsRes),
-      safeJson(userRes)
+      safeJson("topTracks", tracksRes),
+      safeJson("topArtists", artistsRes),
+      safeJson("userInfo", userRes)
     ]);
+
+    console.log("wrapped: shapes", {
+      hasTracks: !!tracksJson.toptracks,
+      hasArtists: !!artistsJson.topartists,
+      hasUser: !!userJson.user
+    });
 
     const tracksArr  = tracksJson.toptracks?.track || [];
     const artistsArr = artistsJson.topartists?.artist || [];
@@ -124,21 +141,11 @@ export default async function handler(req, res) {
     const totalArtistsPeriod =
       Number(artistsAttr.total) || artistsArr.length || 0; // [web:324][web:323]
 
-    // ----- total scrobbles -----
-    // per-period: approximate as sum of track playcounts
-    let totalScrobblesPeriod = 0;
+    // ----- total scrobbles (period, approximate) -----
+    let totalScrobbles = 0;
     for (const t of tracksArr) {
-      totalScrobblesPeriod += Number(t.playcount) || 0;
+      totalScrobbles += Number(t.playcount) || 0;
     }
-
-    // overall: all-time from user.getInfo.playcount[web:337][web:335]
-    const totalScrobblesOverall = Number(userJson.user?.playcount) || 0;
-
-    // ----- origin date (overall only) -----
-    const since =
-      safePeriod === "overall"
-        ? monthYearFromRegistered(userJson.user?.registered)
-        : null;
 
     // ----- top tracks / artists -----
     const topTracks = tracksArr.map((t) => ({
@@ -159,34 +166,32 @@ export default async function handler(req, res) {
 
     const periodLabel = PERIOD_LABELS[safePeriod] || "past while";
 
-    const response =
-      safePeriod === "overall"
-        ? {
-            // overall case
-            username,
-            period: safePeriod,
-            periodLabel,
-            since,                     // { month, year }
-            totalScrobbles: totalScrobblesOverall,
-            totalArtists: totalArtistsPeriod,
-            topTracks: topTracks.slice(0, 5),
-            topArtists: topArtists.slice(0, 5)
-          }
-        : {
-            // non-overall case
-            username,
-            period: safePeriod,
-            periodLabel,
-            totalScrobbles: totalScrobblesPeriod,
-            totalArtists: totalArtistsPeriod,
-            topTracks: topTracks.slice(0, 10),
-            topArtists: topArtists.slice(0, 5)
-          };
+    const response = {
+      username,
+      period: safePeriod,
+      periodLabel,
+      totalScrobbles,
+      totalArtists: totalArtistsPeriod,
+      topTracks: safePeriod === "overall"
+        ? topTracks.slice(0, 5)
+        : topTracks.slice(0, 10),
+      topArtists: topArtists.slice(0, 5)
+    };
+
+    console.log("wrapped: success summary", {
+      totalScrobbles: response.totalScrobbles,
+      totalArtists: response.totalArtists,
+      tracksReturned: response.topTracks.length,
+      artistsReturned: response.topArtists.length
+    });
 
     res.setHeader("Cache-Control", "s-maxage=300");
     return res.status(200).json(response);
   } catch (e) {
     console.error("wrapped core error", e);
-    return res.status(500).json({ error: "wrapped_failed" });
+    // make sure we always send something, so Vercel doesn't 502
+    if (!res.headersSent) {
+      return res.status(500).json({ error: "wrapped_failed" });
+    }
   }
 }
