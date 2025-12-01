@@ -1,10 +1,12 @@
 // api/lastfm.js
+
 const ALLOWED_ORIGINS = [
-  "https://ashique.gt.tc",        // your personal site
-  "https://lastfm-lab.vercel.app"         // optional: your own demo UI
+  "https://ashique.gt.tc",   // put your real site origin here
+  "https://lastfm-lab.vercel.app"     // keep if you also call it from its own UI
 ];
 
 export default async function handler(req, res) {
+  // --- CORS ---
   const origin = req.headers.origin || "";
   if (ALLOWED_ORIGINS.includes(origin)) {
     res.setHeader("Access-Control-Allow-Origin", origin);
@@ -16,10 +18,8 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-
-export default async function handler(req, res) {
+  // --- validate input ---
   const { username } = req.query;
-
   if (!username) {
     return res.status(400).json({ error: "missing_username" });
   }
@@ -30,16 +30,17 @@ export default async function handler(req, res) {
   }
 
   const url =
-    `https://ws.audioscrobbler.com/2.0/?` +
+    "https://ws.audioscrobbler.com/2.0/?" +
     `method=user.getrecenttracks&user=${encodeURIComponent(username)}` +
-    `&limit=20&extended=1&api_key=${API_KEY}&format=json`;  // 20 for nicer visuals[web:187][web:188]
+    `&limit=20&extended=1&api_key=${API_KEY}&format=json`;
 
   try {
     const r = await fetch(url);
     const data = await r.json();
 
     const tracks = (data.recenttracks?.track || []).map(t => {
-      const img = (t.image || []).find(i => i.size === "medium")?.["#text"] || "";
+      const img =
+        (t.image || []).find(i => i.size === "medium")?.["#text"] || "";
       const playing = t["@attr"] && t["@attr"].nowplaying === "true";
       return {
         artist: t.artist?.["#text"] || t.artist?.name || "",
@@ -52,10 +53,9 @@ export default async function handler(req, res) {
       };
     });
 
-    res.setHeader("Cache-Control", "s-maxage=60"); // 60s edge cache
     return res.status(200).json({ username, tracks });
   } catch (e) {
+    console.error("lastfm error", e);
     return res.status(502).json({ error: "lastfm_failed" });
   }
-}
 }
