@@ -2,219 +2,708 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>last.fm corner</title>
+  <title>lastfm lab</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
+    :root {
+      --bg: #020010;
+      --fg-main: #f9f5ff;
+      --fg-soft: #c7b5ff;
+      --accent-1: #a855f7;
+      --accent-2: #fb7185;
+      --accent-3: #22d3ee;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
     body {
-      font-family: system-ui, sans-serif;
-      background: radial-gradient(circle at top, #201139 0, #05030a 60%);
-      color: #f9f5ff;
       min-height: 100vh;
+      background: radial-gradient(circle at top, #1b1030 0, var(--bg) 65%);
+      color: var(--fg-main);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+        "Inter", "Segoe UI", sans-serif;
+      overflow: hidden;
+    }
+
+    .scene {
+      position: fixed;
+      inset: 0;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 24px 12px;
+      flex-direction: column;
+      text-align: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.6s ease, transform 0.6s ease;
+      transform: translateY(12px);
     }
-    .shell {
-      width: 100%;
-      max-width: 780px;
-      background: rgba(16, 9, 30, 0.96);
-      border-radius: 18px;
-      padding: 18px 18px 16px;
-      box-shadow: 0 20px 44px rgba(0, 0, 0, 0.85);
-      border: 1px solid rgba(248, 113, 113, 0.18);
+
+    .scene.active {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
     }
-    .row { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+
+    .bg-blobs {
+      position: fixed;
+      inset: -20%;
+      overflow: hidden;
+      z-index: -1;
+    }
+
+    .blob {
+      position: absolute;
+      width: 40vmax;
+      height: 40vmax;
+      border-radius: 999px;
+      filter: blur(40px);
+      opacity: 0.6;
+      mix-blend-mode: screen;
+    }
+
+    .blob1 {
+      background: radial-gradient(circle at 30% 30%, var(--accent-1), transparent 60%);
+      animation: float1 16s ease-in-out infinite alternate;
+    }
+
+    .blob2 {
+      background: radial-gradient(circle at 60% 70%, var(--accent-2), transparent 60%);
+      animation: float2 20s ease-in-out infinite alternate;
+    }
+
+    .blob3 {
+      background: radial-gradient(circle at 80% 20%, var(--accent-3), transparent 60%);
+      animation: float3 22s ease-in-out infinite alternate;
+    }
+
+    @keyframes float1 {
+      0% { transform: translate(-10%, -10%) scale(1); }
+      100% { transform: translate(10%, 10%) scale(1.1); }
+    }
+    @keyframes float2 {
+      0% { transform: translate(20%, 0) scale(1.05); }
+      100% { transform: translate(-5%, 15%) scale(0.95); }
+    }
+    @keyframes float3 {
+      0% { transform: translate(5%, -10%) scale(1); opacity: 0.4; }
+      100% { transform: translate(-15%, 5%) scale(1.1); opacity: 0.7; }
+    }
+
+    .title-main {
+      font-size: clamp(1.8rem, 4vw, 2.4rem);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      opacity: 0.92;
+    }
+
+    .sub {
+      font-size: 0.9rem;
+      color: var(--fg-soft);
+      max-width: 420px;
+      margin: 0 auto;
+    }
+
+    .math-box, .input-row, .period-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 18px;
+      flex-wrap: wrap;
+    }
+
     input {
-      background:#05030a;
-      border-radius:999px;
-      border:1px solid rgba(148,163,184,.4);
-      color:#f9f5ff;
-      padding:6px 10px;
-      outline:none;
+      background: rgba(0, 0, 0, 0.5);
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.5);
+      color: var(--fg-main);
+      padding: 6px 12px;
+      outline: none;
+      font-size: 0.9rem;
     }
-    input:focus { border-color:#a855f7; }
-    button {
-      border-radius:999px;
-      border:none;
-      padding:6px 14px;
-      background:#fb7185;
-      color:#05030a;
-      cursor:pointer;
+
+    input:focus {
+      border-color: var(--accent-1);
     }
-    button:active { transform:translateY(1px); }
-    .error { color:#fca5a5; margin-top:6px; font-size:0.8rem; }
-    .pill { font-size:0.76rem; padding:3px 8px; border-radius:999px;
-            border:1px solid rgba(148,163,184,.4); }
-    .grid { margin-top:14px; display:grid; gap:10px; }
-    @media(min-width:720px){ .grid{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
-    .card {
-      background:#0b0714;
-      border-radius:14px;
-      padding:10px;
-      border:1px solid rgba(148,163,184,.18);
-      font-size:0.8rem;
+
+    .chip {
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 0.8rem;
+      border: 1px solid rgba(148, 163, 184, 0.6);
+      cursor: pointer;
+      background: rgba(0, 0, 0, 0.35);
+      color: var(--fg-soft);
     }
-    .mono { font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas; font-size:0.8rem; }
+
+    .chip.active {
+      border-color: var(--accent-2);
+      color: var(--fg-main);
+      background: radial-gradient(circle at top, rgba(251, 113, 133, 0.35), transparent 65%);
+    }
+
+    .circle-btn {
+      width: 34px;
+      height: 34px;
+      border-radius: 999px;
+      border: 1px solid rgba(248, 250, 252, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      background: rgba(0, 0, 0, 0.55);
+      transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+    }
+
+    .circle-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.7);
+      background: rgba(15, 23, 42, 0.85);
+    }
+
+    .circle-btn span {
+      font-size: 0.9rem;
+    }
+
+    .hello-word {
+      font-size: clamp(2.4rem, 6vw, 3.2rem);
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: lowercase;
+      margin-bottom: 4px;
+      opacity: 0;
+      transform: translateY(18px);
+      animation: helloIn 0.9s ease forwards;
+    }
+
+    .hello-name {
+      font-size: clamp(1.6rem, 4vw, 2.1rem);
+      font-family: "Georgia", "Times New Roman", serif;
+      letter-spacing: 0.06em;
+      opacity: 0;
+      transform: translateY(18px);
+      animation: nameIn 0.9s ease forwards;
+      animation-delay: 0.55s;
+    }
+
+    @keyframes helloIn {
+      0% { opacity: 0; transform: translateY(18px) scale(0.96); }
+      100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    @keyframes nameIn {
+      0% { opacity: 0; transform: translateY(18px) scale(0.96); }
+      100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .scene-text-main {
+      font-size: clamp(1.3rem, 3vw, 1.8rem);
+      max-width: 520px;
+      margin: 0 auto 10px;
+      line-height: 1.4;
+    }
+
+    .scene-text-soft {
+      font-size: 0.9rem;
+      color: var(--fg-soft);
+      max-width: 420px;
+      margin: 0 auto;
+    }
+
+    .art-circle {
+      width: 140px;
+      height: 140px;
+      border-radius: 999px;
+      overflow: hidden;
+      border: 2px solid rgba(248, 250, 252, 0.7);
+      box-shadow: 0 14px 35px rgba(0,0,0,0.8);
+      margin: 18px auto 10px;
+      background: radial-gradient(circle at top, #4c1d95, #020617);
+    }
+
+    .art-circle img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .list-two-column {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 18px;
+      width: min(780px, 92vw);
+      margin-top: 18px;
+    }
+
+    .list-col {
+      flex: 1 1 260px;
+      text-align: left;
+      font-size: 0.9rem;
+    }
+
+    .list-heading {
+      font-size: 0.85rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--fg-soft);
+      margin-bottom: 8px;
+    }
+
+    .track-row, .artist-row {
+      margin-bottom: 6px;
+    }
+
+    .track-name {
+      font-weight: 500;
+    }
+
+    .track-artist {
+      font-size: 0.8rem;
+      color: var(--fg-soft);
+    }
+
+    .genre-ribbon {
+      width: min(480px, 88vw);
+      height: 14px;
+      border-radius: 999px;
+      margin: 8px auto;
+      position: relative;
+      overflow: hidden;
+      background: radial-gradient(circle at left, rgba(148,163,184,0.5), transparent 70%);
+    }
+
+    .genre-label {
+      font-size: 0.8rem;
+      color: var(--fg-main);
+      opacity: 0.9;
+      margin-top: 2px;
+    }
+
+    .genre-fill {
+      position: absolute;
+      inset: 0;
+      transform-origin: left;
+      background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
+      opacity: 0.85;
+      transform: scaleX(0.1);
+      transition: transform 0.8s ease-out;
+    }
+
+    .genre-ribbon.ready .genre-fill {
+      transform: scaleX(var(--fill, 1));
+    }
+
+    .replay-btn {
+      margin-top: 26px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(248,250,252,0.7);
+      background: rgba(0,0,0,0.6);
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+    }
+
+    .replay-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 26px rgba(0,0,0,0.8);
+      background: radial-gradient(circle at top, rgba(148,163,184,0.3), rgba(15,23,42,0.9));
+    }
+
+    .replay-icon {
+      width: 18px;
+      height: 18px;
+      border-radius: 999px;
+      border: 1px solid rgba(248,250,252,0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.7rem;
+    }
+
+    /* simple cursor hint without text */
+    body {
+      cursor: default;
+    }
+    .scene.active {
+      cursor: pointer;
+    }
+    #scene-final {
+      cursor: default;
+    }
+
+    .error {
+      margin-top: 10px;
+      font-size: 0.8rem;
+      color: #fecaca;
+    }
+
   </style>
 </head>
 <body>
-  <main class="shell">
-    <h1 style="font-size:1.2rem; margin-bottom:8px;">last.fm corner</h1>
+  <div class="bg-blobs">
+    <div class="blob blob1"></div>
+    <div class="blob blob2"></div>
+    <div class="blob blob3"></div>
+  </div>
 
-    <div class="row" id="form-row">
-      <input id="user" placeholder="enter last.fm username" />
-      <span id="captcha-label" class="mono"></span>
-      <input id="captcha-answer" placeholder="answer" style="width:70px;" />
-      <button id="go">enter</button>
+  <!-- Scene 0: math gate -->
+  <section class="scene active" id="scene-math">
+    <div class="title-main">lastfm lab</div>
+    <p class="sub">a tiny, overdramatic way to look at your last.fm listening.</p>
+
+    <div class="math-box">
+      <span id="math-question" style="font-size:0.95rem;"></span>
+      <input id="math-answer" placeholder="answer" inputmode="numeric" />
+      <button class="circle-btn" id="math-go" type="button">
+        <span>→</span>
+      </button>
     </div>
-    <div id="error" class="error"></div>
+    <div class="error" id="math-error"></div>
+  </section>
 
-    <div id="summary" style="margin-top:12px; font-size:0.86rem; display:none;"></div>
+  <!-- Scene 1: username + period -->
+  <section class="scene" id="scene-input">
+    <div class="title-main">wrapped, but last.fm</div>
+    <p class="sub">type a username and a little window of time; the rest is drama.</p>
 
-    <section id="visuals" class="grid" style="display:none;">
-      <div class="card">
-        <div class="mono">now playing</div>
-        <div id="now-playing" style="margin-top:4px;">—</div>
+    <div class="input-row">
+      <input id="user-input" placeholder="last.fm username" />
+    </div>
+
+    <div class="period-row" id="period-row">
+      <button class="chip active" data-period="7day">7d</button>
+      <button class="chip" data-period="1month">1m</button>
+      <button class="chip" data-period="3month">3m</button>
+      <button class="chip" data-period="12month">1y</button>
+      <button class="chip" data-period="overall">overall</button>
+      <button class="circle-btn" id="wrapped-go" type="button">
+        <span>→</span>
+      </button>
+    </div>
+    <div class="error" id="input-error"></div>
+  </section>
+
+  <!-- Scene 1.5: hello username (loading) -->
+  <section class="scene" id="scene-hello">
+    <div class="hello-word">hello,</div>
+    <div class="hello-name" id="hello-name"></div>
+  </section>
+
+  <!-- Scene 2: timeframe + total scrobbles -->
+  <section class="scene" id="scene-1">
+    <div class="scene-text-main" id="scene1-main"></div>
+  </section>
+
+  <!-- Scene 3: top track -->
+  <section class="scene" id="scene-2">
+    <div class="scene-text-main">but you kept coming back to one track:</div>
+    <div class="art-circle">
+      <img id="toptrack-art" src="" alt="top track art" />
+    </div>
+    <div class="scene-text-main" id="toptrack-title"></div>
+    <div class="scene-text-soft" id="toptrack-artist"></div>
+  </section>
+
+  <!-- Scene 4: artist count statement -->
+  <section class="scene" id="scene-3">
+    <div class="scene-text-main" id="scene3-main"></div>
+  </section>
+
+  <!-- Scene 5: top artist focus -->
+  <section class="scene" id="scene-4">
+    <div class="art-circle">
+      <img id="topartist-art" src="" alt="top artist art" />
+    </div>
+    <div class="scene-text-main" id="topartist-name"></div>
+    <div class="scene-text-soft" id="topartist-line"></div>
+  </section>
+
+  <!-- Scene 6: genres -->
+  <section class="scene" id="scene-5">
+    <div class="scene-text-main">the sounds around you most often were:</div>
+    <div id="genre-wrap"></div>
+  </section>
+
+  <!-- Scene 7: final summary + replay -->
+  <section class="scene" id="scene-final">
+    <div class="scene-text-main" id="final-title"></div>
+    <div class="scene-text-soft" id="final-sub"></div>
+
+    <div class="list-two-column">
+      <div class="list-col">
+        <div class="list-heading">top tracks</div>
+        <div id="final-tracks"></div>
       </div>
-      <div class="card">
-        <div class="mono">artists (top 3)</div>
-        <div id="top-artists" style="margin-top:4px;"></div>
+      <div class="list-col">
+        <div class="list-heading">top artists</div>
+        <div id="final-artists"></div>
       </div>
-      <div class="card">
-        <div class="mono">last 5 tracks</div>
-        <ul id="recent-list" style="margin-top:4px; padding-left:16px;"></ul>
-      </div>
-      <div class="card">
-        <div class="mono">tempo</div>
-        <div id="pace" style="margin-top:4px;">—</div>
-      </div>
-    </section>
-  </main>
+    </div>
+
+    <button class="replay-btn" id="replay-btn" type="button">
+      <span class="replay-icon">↻</span>
+      <span>again</span>
+    </button>
+  </section>
 
   <script>
-    const userInput   = document.getElementById("user");
-    const capLabel    = document.getElementById("captcha-label");
-    const capInput    = document.getElementById("captcha-answer");
-    const goBtn       = document.getElementById("go");
-    const errorEl     = document.getElementById("error");
-    const visuals     = document.getElementById("visuals");
-    const summaryEl   = document.getElementById("summary");
-    const nowPlayingEl= document.getElementById("now-playing");
-    const topArtistsEl= document.getElementById("top-artists");
-    const recentList  = document.getElementById("recent-list");
-    const paceEl      = document.getElementById("pace");
+    // ---------- state ----------
+    let currentSceneIndex = 0;
+    const sceneOrder = [
+      "scene-math",
+      "scene-input",
+      "scene-hello",
+      "scene-1",
+      "scene-2",
+      "scene-3",
+      "scene-4",
+      "scene-5",
+      "scene-final"
+    ];
+
+    let chosenUser = "";
+    let chosenPeriod = "3month";
+    let wrappedData = null;
+
+    function showScene(id) {
+      sceneOrder.forEach((sid) => {
+        const el = document.getElementById(sid);
+        if (!el) return;
+        el.classList.toggle("active", sid === id);
+      });
+      currentSceneIndex = sceneOrder.indexOf(id);
+    }
+
+    // ---------- math captcha ----------
+    const mathQ = document.getElementById("math-question");
+    const mathA = document.getElementById("math-answer");
+    const mathGo = document.getElementById("math-go");
+    const mathErr = document.getElementById("math-error");
 
     let a = 0, b = 0, op = "+";
 
-    function newCaptcha() {
-      a = Math.floor(Math.random() * 10) + 1;
-      b = Math.floor(Math.random() * 10) + 1;
+    function newMath() {
+      a = Math.floor(Math.random() * 9) + 2;
+      b = Math.floor(Math.random() * 9) + 1;
       op = Math.random() < 0.5 ? "+" : "-";
-      capLabel.textContent = `${a} ${op} ${b} = ?`;
-      capInput.value = "";
+      mathQ.textContent = `${a} ${op} ${b} = ?`;
+      mathA.value = "";
+      mathErr.textContent = "";
     }
 
-    function checkCaptcha() {
-      const ans = Number(capInput.value.trim());
+    function checkMath() {
+      const val = Number((mathA.value || "").trim());
       const correct = op === "+" ? a + b : a - b;
-      return ans === correct;
+      return val === correct;
     }
 
-    async function fetchLastfm(username) {
-      errorEl.textContent = "";
-      visuals.style.display = "none";
-      summaryEl.style.display = "none";
-      nowPlayingEl.textContent = "loading…";
-
-      try {
-        const res = await fetch(`/api/lastfm?username=${encodeURIComponent(username)}`);
-        if (!res.ok) {
-          errorEl.textContent = "could not reach last.fm right now.";
-          return;
-        }
-        const data = await res.json();
-        const tracks = data.tracks || [];
-
-        if (!tracks.length) {
-          errorEl.textContent = "no recent tracks found for that user.";
-          return;
-        }
-
-        // summary
-        const now = tracks.find(t => t.nowPlaying);
-        const last = tracks[0];
-        summaryEl.style.display = "block";
-        summaryEl.textContent =
-          `showing ${tracks.length} recent tracks for @${data.username}.`;
-
-
-        // now playing card
-        if (now) {
-          nowPlayingEl.textContent = `${now.artist} – ${now.title}`;
-        } else {
-          nowPlayingEl.textContent = `last played: ${last.artist} – ${last.title}`;
-        }
-
-        // top 3 artists (simple count)
-        const counts = {};
-        for (const t of tracks) {
-          if (!t.artist) continue;
-          counts[t.artist] = (counts[t.artist] || 0) + 1;
-        }
-        const top = Object.entries(counts)
-          .sort((a,b) => b[1]-a[1])
-          .slice(0,3);
-
-        topArtistsEl.innerHTML = "";
-        top.forEach(([name,count]) => {
-          const span = document.createElement("span");
-          span.className = "pill";
-          span.textContent = `${name} ×${count}`;
-          topArtistsEl.appendChild(span);
-        });
-
-        // last 5 tracks list
-        recentList.innerHTML = "";
-        tracks.slice(0,5).forEach(t => {
-          const li = document.createElement("li");
-          li.textContent = `${t.artist} – ${t.title}`;
-          recentList.appendChild(li);
-        });
-
-        // pace: minutes between first and last track with a date
-        const dated = tracks.filter(t => t.date);
-        if (dated.length >= 2) {
-          const minT = dated[dated.length - 1].date;
-          const maxT = dated[0].date;
-          const mins = Math.round((maxT - minT) / 60);
-          paceEl.textContent = `${mins} minutes between oldest and newest scrobble in this batch.`;
-        } else {
-          paceEl.textContent = "not enough timestamped tracks.";
-        }
-
-        visuals.style.display = "grid";
-      } catch (e) {
-        errorEl.textContent = "something broke while talking to last.fm.";
-      }
-    }
-
-    goBtn.addEventListener("click", () => {
-      const u = userInput.value.trim();
-      if (!u) {
-        errorEl.textContent = "enter a username first.";
+    mathGo.addEventListener("click", () => {
+      if (!checkMath()) {
+        mathErr.textContent = "almost. try again.";
+        newMath();
         return;
       }
-      if (!checkCaptcha()) {
-        errorEl.textContent = "captcha didn’t match, try again.";
-        newCaptcha();
-        return;
-      }
-      fetchLastfm(u);
-      newCaptcha();
+      // small delay then go to input scene
+      showScene("scene-input");
     });
 
-    newCaptcha();
+    // ---------- username + period ----------
+    const userInput = document.getElementById("user-input");
+    const periodRow = document.getElementById("period-row");
+    const wrappedGo = document.getElementById("wrapped-go");
+    const inputErr = document.getElementById("input-error");
+
+    periodRow.addEventListener("click", (e) => {
+      const btn = e.target.closest(".chip");
+      if (!btn) return;
+      periodRow
+        .querySelectorAll(".chip")
+        .forEach((c) => c.classList.remove("active"));
+      btn.classList.add("active");
+      chosenPeriod = btn.dataset.period || "3month";
+    });
+
+    async function startWrapped() {
+      const u = (userInput.value || "").trim();
+      if (!u) {
+        inputErr.textContent = "username first.";
+        return;
+      }
+      chosenUser = u;
+      inputErr.textContent = "";
+
+      // move to hello scene, set name
+      const helloName = document.getElementById("hello-name");
+      helloName.textContent = u;
+      showScene("scene-hello");
+
+      // fetch data quietly while hello anim plays
+      try {
+        const url =
+          `/api/wrapped?username=${encodeURIComponent(u)}&period=${encodeURIComponent(chosenPeriod)}`;
+        const res = await fetch(url);
+        if (!res.ok) {
+          inputErr.textContent = "couldn’t reach last.fm right now.";
+          showScene("scene-input");
+          return;
+        }
+        wrappedData = await res.json();
+      } catch (e) {
+        inputErr.textContent = "something went sideways with last.fm.";
+        showScene("scene-input");
+        return;
+      }
+
+      // hold hello for at least ~2.2s to let animations breathe
+      setTimeout(() => {
+        if (!wrappedData) return;
+        prepareScenesFromData(wrappedData);
+        showScene("scene-1");
+      }, 2200);
+    }
+
+    wrappedGo.addEventListener("click", startWrapped);
+
+    // ---------- prepare data-driven scenes ----------
+    function periodLabelHuman(data) {
+      if (data.period === "overall" && data.since && data.since.month && data.since.year) {
+        return `since ${data.since.month} ${data.since.year}`;
+      }
+      return data.periodLabel || "recently";
+    }
+
+    function prepareScenesFromData(data) {
+      // Scene 1 text
+      const label = periodLabelHuman(data);
+      const s1main = document.getElementById("scene1-main");
+      const total = data.totalScrobbles || 0;
+      s1main.textContent = `for the ${label}, you scrobbled ${total} tracks.`;
+
+      // Scene 2 top track
+      const t = data.topTrack;
+      const ttArt = document.getElementById("toptrack-art");
+      const ttTitle = document.getElementById("toptrack-title");
+      const ttArtist = document.getElementById("toptrack-artist");
+
+      if (t) {
+        ttArt.src = t.image || "";
+        ttTitle.textContent = t.name || "";
+        ttArtist.textContent = t.artist || "";
+      } else {
+        ttTitle.textContent = "no top track found here.";
+        ttArtist.textContent = "";
+      }
+
+      // Scene 3 artist count
+      const s3main = document.getElementById("scene3-main");
+      const artistCount = (data.topArtists || []).length;
+      s3main.textContent =
+        artistCount > 0
+          ? `you drifted past ${artistCount} artists, but one stayed a little louder than the rest.`
+          : `not enough artists to pick a favourite from.`;
+
+      // Scene 4 top artist
+      const a = data.topArtist;
+      const taArt = document.getElementById("topartist-art");
+      const taName = document.getElementById("topartist-name");
+      const taLine = document.getElementById("topartist-line");
+
+      if (a) {
+        taArt.src = a.image || "";
+        taName.textContent = a.name || "";
+        taLine.textContent = `you scrobbled them ${a.playcount || 0} times. that’s not casual.`;
+      } else {
+        taName.textContent = "no clear favourite artist.";
+        taLine.textContent = "";
+      }
+
+      // Scene 5 genres
+      const genreWrap = document.getElementById("genre-wrap");
+      genreWrap.innerHTML = "";
+      (data.topGenres || []).forEach((g, idx) => {
+        const ribbon = document.createElement("div");
+        ribbon.className = "genre-ribbon";
+        ribbon.style.setProperty("--fill", Math.max(0.2, g.weight || 0.1));
+        const fill = document.createElement("div");
+        fill.className = "genre-fill";
+        ribbon.appendChild(fill);
+        const label = document.createElement("div");
+        label.className = "genre-label";
+        label.textContent = g.name;
+        genreWrap.appendChild(ribbon);
+        genreWrap.appendChild(label);
+        // trigger fill after a tiny delay
+        setTimeout(() => ribbon.classList.add("ready"), 80 * (idx + 1));
+      });
+
+      // Final scene
+      const finalTitle = document.getElementById("final-title");
+      const finalSub = document.getElementById("final-sub");
+      finalTitle.textContent = `${data.username}`;
+      finalSub.textContent = `wrapped for the ${label}.`;
+
+      const finalTracks = document.getElementById("final-tracks");
+      finalTracks.innerHTML = "";
+      (data.topTracks || []).forEach((t) => {
+        const row = document.createElement("div");
+        row.className = "track-row";
+        row.innerHTML =
+          `<div class="track-name">${t.name}</div>` +
+          `<div class="track-artist">${t.artist}</div>`;
+        finalTracks.appendChild(row);
+      });
+
+      const finalArtists = document.getElementById("final-artists");
+      finalArtists.innerHTML = "";
+      (data.topArtists || []).forEach((a) => {
+        const row = document.createElement("div");
+        row.className = "artist-row";
+        row.textContent = `${a.name} · ${a.playcount} plays`;
+        finalArtists.appendChild(row);
+      });
+    }
+
+    // ---------- scene click progression ----------
+    function nextScene() {
+      const idx = currentSceneIndex;
+      const nextIdx = idx + 1;
+      if (nextIdx >= sceneOrder.length) return;
+      const nextId = sceneOrder[nextIdx];
+      // skip math + input + hello via explicit controls only
+      if (["scene-math", "scene-input", "scene-hello"].includes(sceneOrder[idx])) {
+        return;
+      }
+      showScene(nextId);
+    }
+
+    // attach click for scenes 1..5
+    ["scene-1","scene-2","scene-3","scene-4","scene-5"].forEach((id) => {
+      const el = document.getElementById(id);
+      el.addEventListener("click", () => nextScene());
+    });
+
+    // final scene: no auto next, just replay
+    const replayBtn = document.getElementById("replay-btn");
+    replayBtn.addEventListener("click", () => {
+      if (!wrappedData) return;
+      const helloName = document.getElementById("hello-name");
+      helloName.textContent = wrappedData.username;
+      showScene("scene-hello");
+      setTimeout(() => {
+        prepareScenesFromData(wrappedData);
+        showScene("scene-1");
+      }, 2200);
+    });
+
+    // init
+    newMath();
   </script>
 </body>
 </html>
