@@ -2,7 +2,7 @@
 
 const ALLOWED_ORIGINS = [
   "https://your-main-site.example",     // replace with your main site
-  "https://lastfm-lab.vercel.app"      // adjust for the lab UI if needed
+  "https://lastfm-lab.vercel.app"      // adjust if needed
 ];
 
 const PERIOD_LABELS = {
@@ -15,7 +15,6 @@ const PERIOD_LABELS = {
 };
 
 function monthYearFromRegistered(registered) {
-  // registered like "2002-11-20 11:50" with unixtime attr[web:337]
   if (!registered) return null;
   const txt = registered["#text"] || "";
   const datePart = txt.split(" ")[0] || "";
@@ -37,8 +36,8 @@ function pickImage(images, preferred = "extralarge") {
   if (!Array.isArray(images)) return "";
   const exact = images.find(i => i.size === preferred && i["#text"]);
   if (exact) return exact["#text"];
-  const fallbackOrder = ["large","medium","small"];
-  for (const size of fallbackOrder) {
+  const fallbacks = ["large","medium","small"];
+  for (const size of fallbacks) {
     const img = images.find(i => i.size === size && i["#text"]);
     if (img) return img["#text"];
   }
@@ -102,7 +101,6 @@ export default async function handler(req, res) {
     async function safeJson(r) {
       try {
         const j = await r.json();
-        // Last.fm sometimes returns { error, message } with 200 status[web:323][web:326]
         if (j && j.error) return {};
         return j || {};
       } catch {
@@ -119,15 +117,14 @@ export default async function handler(req, res) {
     const tracksArr  = tracksJson.toptracks?.track || [];
     const artistsArr = artistsJson.topartists?.artist || [];
 
-    // ----- total scrobbles -----
-    // 1) per-period approximate from top tracks
+    // total from tracks for this period
     let totalFromTracks = 0;
     for (const t of tracksArr) {
       const pc = Number(t.playcount) || 0;
       totalFromTracks += pc;
     }
 
-    // 2) all-time total from user.getInfo (playcount)[web:337]
+    // all-time total from user.getInfo[web:337]
     const globalPlaycount = Number(userJson.user?.playcount) || 0;
 
     let totalScrobbles;
@@ -137,12 +134,12 @@ export default async function handler(req, res) {
       totalScrobbles = totalFromTracks;
     }
 
-    // ----- total artist count (all pages) -----
+    // total artist count across pages[web:324][web:323]
     const artistsAttr = artistsJson.topartists?.["@attr"] || {};
     const totalArtistCount =
-      Number(artistsAttr.total) || artistsArr.length || 0; // [web:324][web:323]
+      Number(artistsAttr.total) || artistsArr.length || 0;
 
-    // ----- top track -----
+    // top track
     const topTrackRaw = tracksArr[0];
     const topTrack = topTrackRaw
       ? {
@@ -156,7 +153,7 @@ export default async function handler(req, res) {
         }
       : null;
 
-    // ----- top artist -----
+    // top artist
     const topArtistRaw = artistsArr[0];
     const topArtist = topArtistRaw
       ? {
@@ -166,7 +163,7 @@ export default async function handler(req, res) {
         }
       : null;
 
-    // ----- topTracks list (up to 10) -----
+    // lists
     const topTracks = tracksArr.slice(0, 10).map((t) => ({
       name: t.name || "",
       artist:
@@ -176,52 +173,13 @@ export default async function handler(req, res) {
       playcount: Number(t.playcount) || 0
     }));
 
-    // ----- topArtists list (up to 5) -----
     const topArtists = artistsArr.slice(0, 5).map((a) => ({
       name: a.name || "",
       playcount: Number(a.playcount) || 0
     }));
 
-    // ----- topGenres via artist.getTopTags on top few artists -----
-    const topGenreMap = {};
-    const tagPromises = artistsArr.slice(0, 8).map(async (a) => {
-      const artistName = encodeURIComponent(a.name);
-      const url = params(
-        `method=artist.getTopTags&artist=${artistName}`
-      ); // [web:340]
-      try {
-        const r = await fetch(url);
-        const j = await safeJson(r);
-        const tags = j.toptags?.tag || [];
-        for (const tag of tags.slice(0, 5)) {
-          const name = (tag.name || "").toLowerCase();
-          if (!name) continue;
-          const count = Number(tag.count) || 1;
-          topGenreMap[name] = (topGenreMap[name] || 0) + count;
-        }
-      } catch {
-        // ignore individual tag failures
-      }
-    });
-
-    await Promise.all(tagPromises);
-
-    const topGenresEntries = Object.entries(topGenreMap)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5);
-
-    const totalTagWeight =
-      topGenresEntries.reduce((sum, [, w]) => sum + w, 0) || 1;
-
-    const topGenresNorm = topGenresEntries.map(([name, weight]) => ({
-      name,
-      weight: weight / totalTagWeight
-    }));
-
-    // ----- period label -----
     const baseLabel = PERIOD_LABELS[safePeriod] || "past while";
 
-    // ----- user since (for overall) -----
     let since = null;
     if (safePeriod === "overall") {
       const registered = userJson.user?.registered;
@@ -235,10 +193,9 @@ export default async function handler(req, res) {
       since,
       totalScrobbles,
       totalArtistCount,
-
       topTrack,
       topArtist,
-      topGenres: topGenresNorm,
+      topGenres: [],   // filled by wgenres.js later
       topTracks,
       topArtists
     };
