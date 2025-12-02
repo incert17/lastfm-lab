@@ -18,18 +18,15 @@ const PERIOD_LABELS = {
   "overall":"overall"
 };
 
-const LASTFM_PLACEHOLDER_FRAGMENT = "2a96cbd8b46e442fc41c2b86b821562f"; // default avatar hash[web:425]
+// default avatar hash used in Last.fm placeholder images[web:425]
+const LASTFM_PLACEHOLDER_FRAGMENT = "2a96cbd8b46e442fc41c2b86b821562f";
 
 function pickImage(images) {
-  if (!Array.isArray(images)) return { url: "", isPlaceholder: false };
-
-  // first non-empty url
+  if (!Array.isArray(images)) return "";
   const any = images.find(i => i && i["#text"]);
-  if (!any) return { url: "", isPlaceholder: false };
-
-  const url = any["#text"];
-  const isPlaceholder = url.includes(LASTFM_PLACEHOLDER_FRAGMENT);
-  return { url: isPlaceholder ? "" : url, isPlaceholder };
+  if (!any) return "";
+  const url = any["#text"] || "";
+  return url.includes(LASTFM_PLACEHOLDER_FRAGMENT) ? "" : url;
 }
 
 export default async function handler(req, res) {
@@ -75,7 +72,7 @@ export default async function handler(req, res) {
   ); // [web:324]
   const userInfoUrl   = params(
     `method=user.getInfo&user=${encodeURIComponent(username)}`
-  ); // [web:337][web:335] (for logging / potential future use)
+  ); // [web:337][web:335] (mostly for logging / possible future use)
 
   console.log("wrapped: starting", {
     username,
@@ -173,7 +170,7 @@ export default async function handler(req, res) {
       totalScrobbles: totalTracksDistinct,
       totalArtists: totalArtistsDistinct,
       topTracks: topTracks.slice(0, 10),
-      topArtists: topArtists.slice(0, 5)
+      topArtists: topArtists.slice(0, 10)
     };
 
     console.log("wrapped: success summary", {
