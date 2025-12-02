@@ -18,16 +18,17 @@ const PERIOD_LABELS = {
   "overall":"overall"
 };
 
-function pickImage(images, preferred = "extralarge") {
+function pickImage(images) {
   if (!Array.isArray(images)) return "";
-  const exact = images.find(i => i.size === preferred && i["#text"]);
-  if (exact) return exact["#text"];
-  const fallbacks = ["large","medium","small"];
-  for (const size of fallbacks) {
+  // prefer largest available, but accept anything non-empty
+  const order = ["mega", "extralarge", "large", "medium", "small"];
+  for (const size of order) {
     const img = images.find(i => i.size === size && i["#text"]);
-    if (img) return img["#text"];
+    if (img && img["#text"]) return img["#text"];
   }
-  return "";
+  // as a final fallback, return first non-empty
+  const any = images.find(i => i["#text"]);
+  return any ? any["#text"] : "";
 }
 
 export default async function handler(req, res) {
