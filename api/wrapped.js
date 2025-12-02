@@ -17,18 +17,26 @@ const PERIOD_LABELS = {
   "12month":"past year",
   "overall":"overall"
 };
+const LASTFM_PLACEHOLDER_FRAGMENT = "2a96cbd8b46e442fc41c2b86b821562f";
+
+function isRealLastfmImage(url = "") {
+  if (!url) return false;
+  return !url.includes(LASTFM_PLACEHOLDER_FRAGMENT);
+}
 
 function pickImage(images) {
   if (!Array.isArray(images)) return "";
-  // prefer largest available, but accept anything non-empty
   const order = ["mega", "extralarge", "large", "medium", "small"];
+
+  // prefer real, non-placeholder images in size order
   for (const size of order) {
-    const img = images.find(i => i.size === size && i["#text"]);
-    if (img && img["#text"]) return img["#text"];
+    const img = images.find(i => i.size === size && isRealLastfmImage(i["#text"]));
+    if (img) return img["#text"];
   }
-  // as a final fallback, return first non-empty
-  const any = images.find(i => i["#text"]);
-  return any ? any["#text"] : "";
+
+  // final fallback: first real image of any size
+  const anyReal = images.find(i => isRealLastfmImage(i["#text"]));
+  return anyReal ? anyReal["#text"] : "";
 }
 
 export default async function handler(req, res) {
