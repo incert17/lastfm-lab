@@ -152,13 +152,13 @@ export default async function handler(req, res) {
         t.artist?.["#text"] ||
         "",
       playcount: Number(t.playcount) || 0,
-      image: pickImage(t.image)
+      image: t.image
     }));
 
     const topArtists = artistsArr.map((a) => ({
       name: a.name || "",
       playcount: Number(a.playcount) || 0,
-      image: pickImage(a.image)
+      image: a.image
     }));
 
     const periodLabel = PERIOD_LABELS[safePeriod] || "past while";
