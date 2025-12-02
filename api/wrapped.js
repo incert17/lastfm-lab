@@ -69,11 +69,11 @@ export default async function handler(req, res) {
     `method=user.getTopTracks&user=${encodeURIComponent(username)}&period=${safePeriod}&limit=10`
   ); // [web:323][web:326]
   const topArtistsUrl = params(
-    `method=user.getTopArtists&user=${encodeURIComponent(username)}&period=${safePeriod}&limit=5`
+    `method=user.getTopArtists&user=${encodeURIComponent(username)}&period=${safePeriod}&limit=10`
   ); // [web:324]
   const userInfoUrl   = params(
     `method=user.getInfo&user=${encodeURIComponent(username)}`
-  ); // [web:337][web:335] (for logging only)
+  ); // [web:337][web:335] (for logging / potential future use)
 
   console.log("wrapped: starting", {
     username,
@@ -136,18 +136,16 @@ export default async function handler(req, res) {
     const tracksArr  = tracksJson.toptracks?.track || [];
     const artistsArr = artistsJson.topartists?.artist || [];
 
-    // ----- total artists (period) -----
+    // ----- totals from @attr -----
+    const tracksAttr  = tracksJson.toptracks?.["@attr"] || {};
     const artistsAttr = artistsJson.topartists?.["@attr"] || {};
-    const totalArtistsPeriod =
-      Number(artistsAttr.total) || artistsArr.length || 0; // [web:324][web:323]
 
-    // ----- total scrobbles (period, approximate) -----
-    let totalScrobbles = 0;
-    for (const t of tracksArr) {
-      totalScrobbles += Number(t.playcount) || 0;
-    }
+    const totalTracksDistinct  =
+      Number(tracksAttr.total)  || tracksArr.length || 0;   // distinct tracks in period[web:323][web:326]
+    const totalArtistsDistinct =
+      Number(artistsAttr.total) || artistsArr.length || 0;   // distinct artists in period[web:324][web:323]
 
-    // ----- top tracks / artists -----
+    // ----- top tracks / artists arrays -----
     const topTracks = tracksArr.map((t) => ({
       name: t.name || "",
       artist:
@@ -170,11 +168,9 @@ export default async function handler(req, res) {
       username,
       period: safePeriod,
       periodLabel,
-      totalScrobbles,
-      totalArtists: totalArtistsPeriod,
-      topTracks: safePeriod === "overall"
-        ? topTracks.slice(0, 5)
-        : topTracks.slice(0, 10),
+      totalScrobbles: totalTracksDistinct,
+      totalArtists: totalArtistsDistinct,
+      topTracks: topTracks.slice(0, 10),
       topArtists: topArtists.slice(0, 5)
     };
 
@@ -189,7 +185,6 @@ export default async function handler(req, res) {
     return res.status(200).json(response);
   } catch (e) {
     console.error("wrapped core error", e);
-    // make sure we always send something, so Vercel doesn't 502
     if (!res.headersSent) {
       return res.status(500).json({ error: "wrapped_failed" });
     }
