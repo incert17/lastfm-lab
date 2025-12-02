@@ -51,7 +51,6 @@
       overflow: hidden;
       z-index: -1;
     }
-
     .blob {
       position: absolute;
       width: 40vmax;
@@ -61,22 +60,18 @@
       opacity: 0.6;
       mix-blend-mode: screen;
     }
-
     .blob1 {
       background: radial-gradient(circle at 30% 30%, var(--accent-1), transparent 60%);
       animation: float1 16s ease-in-out infinite alternate;
     }
-
     .blob2 {
       background: radial-gradient(circle at 60% 70%, var(--accent-2), transparent 60%);
       animation: float2 20s ease-in-out infinite alternate;
     }
-
     .blob3 {
       background: radial-gradient(circle at 80% 20%, var(--accent-3), transparent 60%);
       animation: float3 22s ease-in-out infinite alternate;
     }
-
     @keyframes float1 {
       0% { transform: translate(-10%, -10%) scale(1); }
       100% { transform: translate(10%, 10%) scale(1.1); }
@@ -327,16 +322,9 @@
       font-size: 0.7rem;
     }
 
-    /* simple cursor hint without text */
-    body {
-      cursor: default;
-    }
-    .scene.active {
-      cursor: pointer;
-    }
-    #scene-final {
-      cursor: default;
-    }
+    body { cursor: default; }
+    .scene.active { cursor: pointer; }
+    #scene-final { cursor: default; }
 
     .error {
       margin-top: 10px;
@@ -344,6 +332,11 @@
       color: #fecaca;
     }
 
+    .tiny-muted {
+      font-size: 0.8rem;
+      color: var(--fg-soft);
+      margin-top: 6px;
+    }
   </style>
 </head>
 <body>
@@ -390,15 +383,16 @@
     <div class="error" id="input-error"></div>
   </section>
 
-  <!-- Scene 1.5: hello username (loading) -->
+  <!-- Scene 1.5: hello username -->
   <section class="scene" id="scene-hello">
     <div class="hello-word">hello,</div>
     <div class="hello-name" id="hello-name"></div>
   </section>
 
-  <!-- Scene 2: timeframe + total scrobbles -->
+  <!-- Scene 2: timeframe + total tracks/artist counts -->
   <section class="scene" id="scene-1">
     <div class="scene-text-main" id="scene1-main"></div>
+    <div class="scene-text-soft" id="scene1-soft"></div>
   </section>
 
   <!-- Scene 3: top track -->
@@ -425,10 +419,11 @@
     <div class="scene-text-soft" id="topartist-line"></div>
   </section>
 
-  <!-- Scene 6: genres -->
+  <!-- Scene 6: genres (optional) -->
   <section class="scene" id="scene-5">
     <div class="scene-text-main">the sounds around you most often were:</div>
     <div id="genre-wrap"></div>
+    <div class="tiny-muted" id="genre-note"></div>
   </section>
 
   <!-- Scene 7: final summary + replay -->
@@ -454,7 +449,7 @@
   </section>
 
   <script>
-    // ---------- state ----------
+    // ---------- global state + caching ----------
     let currentSceneIndex = 0;
     const sceneOrder = [
       "scene-math",
@@ -471,6 +466,8 @@
     let chosenUser = "";
     let chosenPeriod = "3month";
     let wrappedData = null;
+    let genresPromise = null;
+    let genresResult = null;
 
     function showScene(id) {
       sceneOrder.forEach((sid) => {
@@ -510,7 +507,6 @@
         newMath();
         return;
       }
-      // small delay then go to input scene
       showScene("scene-input");
     });
 
@@ -539,12 +535,10 @@
       chosenUser = u;
       inputErr.textContent = "";
 
-      // move to hello scene, set name
       const helloName = document.getElementById("hello-name");
       helloName.textContent = u;
       showScene("scene-hello");
 
-      // fetch data quietly while hello anim plays
       try {
         const url =
           `/api/wrapped?username=${encodeURIComponent(u)}&period=${encodeURIComponent(chosenPeriod)}`;
@@ -555,13 +549,42 @@
           return;
         }
         wrappedData = await res.json();
+        // cache in sessionStorage so replay doesn't refetch
+        sessionStorage.setItem("lastfmWrapped", JSON.stringify({
+          data: wrappedData,
+          username: chosenUser,
+          period: chosenPeriod
+        }));
       } catch (e) {
+        console.error("wrapped fetch failed", e);
         inputErr.textContent = "something went sideways with last.fm.";
         showScene("scene-input");
         return;
       }
 
-      // hold hello for at least ~2.2s to let animations breathe
+      // kick off genres in the background now that we have topArtists
+      const artistsPayload = (wrappedData.topArtists || []).map(a => ({
+        name: a.name,
+        playcount: a.playcount
+      }));
+
+      genresPromise = fetch("/api/wgenres", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ artists: artistsPayload })
+      })
+      .then(r => (r.ok ? r.json() : null))
+      .then(json => {
+        genresResult = json;
+        return json;
+      })
+      .catch(err => {
+        console.error("wgenres fetch failed", err);
+        genresResult = null;
+        return null;
+      });
+
+      // let hello animation breathe
       setTimeout(() => {
         if (!wrappedData) return;
         prepareScenesFromData(wrappedData);
@@ -571,23 +594,17 @@
 
     wrappedGo.addEventListener("click", startWrapped);
 
-    // ---------- prepare data-driven scenes ----------
-    function periodLabelHuman(data) {
-      if (data.period === "overall" && data.since && data.since.month && data.since.year) {
-        return `since ${data.since.month} ${data.since.year}`;
-      }
-      return data.periodLabel || "recently";
-    }
-
+    // ---------- prepare scenes from wrappedData ----------
     function prepareScenesFromData(data) {
-      // Scene 1 text
-      const label = periodLabelHuman(data);
       const s1main = document.getElementById("scene1-main");
-      const total = data.totalScrobbles || 0;
-      s1main.textContent = `for the ${label}, you scrobbled ${total} tracks.`;
+      const s1soft = document.getElementById("scene1-soft");
+      const totalTracks = data.totalScrobbles || 0;
+      const totalArtists = data.totalArtists || 0;
+      s1main.textContent = `for the ${data.periodLabel || "recent while"}, you scrobbled ${totalTracks} tracks.`;
+      s1soft.textContent = `you crossed paths with ${totalArtists} different artists.`;
 
       // Scene 2 top track
-      const t = data.topTrack;
+      const t = (data.topTracks || [])[0];
       const ttArt = document.getElementById("toptrack-art");
       const ttTitle = document.getElementById("toptrack-title");
       const ttArtist = document.getElementById("toptrack-artist");
@@ -603,14 +620,13 @@
 
       // Scene 3 artist count
       const s3main = document.getElementById("scene3-main");
-      const artistCount = (data.topArtists || []).length;
       s3main.textContent =
-        artistCount > 0
-          ? `you drifted past ${artistCount} artists, but one stayed a little louder than the rest.`
+        totalArtists > 0
+          ? `you drifted past ${totalArtists} artists, but one stayed a little louder than the rest.`
           : `not enough artists to pick a favourite from.`;
 
       // Scene 4 top artist
-      const a = data.topArtist;
+      const a = (data.topArtists || [])[0];
       const taArt = document.getElementById("topartist-art");
       const taName = document.getElementById("topartist-name");
       const taLine = document.getElementById("topartist-line");
@@ -624,30 +640,11 @@
         taLine.textContent = "";
       }
 
-      // Scene 5 genres
-      const genreWrap = document.getElementById("genre-wrap");
-      genreWrap.innerHTML = "";
-      (data.topGenres || []).forEach((g, idx) => {
-        const ribbon = document.createElement("div");
-        ribbon.className = "genre-ribbon";
-        ribbon.style.setProperty("--fill", Math.max(0.2, g.weight || 0.1));
-        const fill = document.createElement("div");
-        fill.className = "genre-fill";
-        ribbon.appendChild(fill);
-        const label = document.createElement("div");
-        label.className = "genre-label";
-        label.textContent = g.name;
-        genreWrap.appendChild(ribbon);
-        genreWrap.appendChild(label);
-        // trigger fill after a tiny delay
-        setTimeout(() => ribbon.classList.add("ready"), 80 * (idx + 1));
-      });
-
       // Final scene
       const finalTitle = document.getElementById("final-title");
       const finalSub = document.getElementById("final-sub");
       finalTitle.textContent = `${data.username}`;
-      finalSub.textContent = `wrapped for the ${label}.`;
+      finalSub.textContent = `wrapped for the ${data.periodLabel || "recent while"}.`;
 
       const finalTracks = document.getElementById("final-tracks");
       finalTracks.innerHTML = "";
@@ -668,6 +665,47 @@
         row.textContent = `${a.name} · ${a.playcount} plays`;
         finalArtists.appendChild(row);
       });
+
+      // clear old genre ribbons if any
+      const genreWrap = document.getElementById("genre-wrap");
+      genreWrap.innerHTML = "";
+      document.getElementById("genre-note").textContent = "";
+    }
+
+    // ---------- genre scene wiring ----------
+    async function enterGenreScene() {
+      showScene("scene-5");
+      const genreWrap = document.getElementById("genre-wrap");
+      const genreNote = document.getElementById("genre-note");
+
+      genreWrap.innerHTML = "";
+      genreNote.textContent = "";
+
+      if (!genresPromise) {
+        // nothing in flight → nothing to show, user can tap to skip
+        return;
+      }
+
+      const result = genresResult || await genresPromise;
+      if (!result || !Array.isArray(result.topGenres) || !result.topGenres.length) {
+        genreNote.textContent = ""; // stay silent, just let tap skip
+        return;
+      }
+
+      result.topGenres.forEach((g, idx) => {
+        const ribbon = document.createElement("div");
+        ribbon.className = "genre-ribbon";
+        ribbon.style.setProperty("--fill", Math.max(0.2, g.weight || 0.1));
+        const fill = document.createElement("div");
+        fill.className = "genre-fill";
+        ribbon.appendChild(fill);
+        const label = document.createElement("div");
+        label.className = "genre-label";
+        label.textContent = g.name;
+        genreWrap.appendChild(ribbon);
+        genreWrap.appendChild(label);
+        setTimeout(() => ribbon.classList.add("ready"), 80 * (idx + 1));
+      });
     }
 
     // ---------- scene click progression ----------
@@ -676,28 +714,59 @@
       const nextIdx = idx + 1;
       if (nextIdx >= sceneOrder.length) return;
       const nextId = sceneOrder[nextIdx];
-      // skip math + input + hello via explicit controls only
-      if (["scene-math", "scene-input", "scene-hello"].includes(sceneOrder[idx])) {
-        return;
-      }
       showScene(nextId);
+      if (nextId === "scene-5") {
+        // entering genre scene
+        enterGenreScene();
+      }
     }
 
-    // attach click for scenes 1..5
     ["scene-1","scene-2","scene-3","scene-4","scene-5"].forEach((id) => {
       const el = document.getElementById(id);
       el.addEventListener("click", () => nextScene());
     });
 
-    // final scene: no auto next, just replay
     const replayBtn = document.getElementById("replay-btn");
     replayBtn.addEventListener("click", () => {
+      const cached = sessionStorage.getItem("lastfmWrapped");
+      if (!cached) return;
+      try {
+        const parsed = JSON.parse(cached);
+        wrappedData = parsed.data;
+        chosenUser = parsed.username;
+        chosenPeriod = parsed.period;
+      } catch {
+        return;
+      }
       if (!wrappedData) return;
       const helloName = document.getElementById("hello-name");
       helloName.textContent = wrappedData.username;
+      prepareScenesFromData(wrappedData);
+
+      // restart genres in background based on cached data
+      const artistsPayload = (wrappedData.topArtists || []).map(a => ({
+        name: a.name,
+        playcount: a.playcount
+      }));
+      genresResult = null;
+      genresPromise = fetch("/api/wgenres", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ artists: artistsPayload })
+      })
+      .then(r => (r.ok ? r.json() : null))
+      .then(json => {
+        genresResult = json;
+        return json;
+      })
+      .catch(err => {
+        console.error("wgenres fetch failed (replay)", err);
+        genresResult = null;
+        return null;
+      });
+
       showScene("scene-hello");
       setTimeout(() => {
-        prepareScenesFromData(wrappedData);
         showScene("scene-1");
       }, 2200);
     });
