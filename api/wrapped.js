@@ -17,26 +17,19 @@ const PERIOD_LABELS = {
   "12month":"past year",
   "overall":"overall"
 };
-const LASTFM_PLACEHOLDER_FRAGMENT = "2a96cbd8b46e442fc41c2b86b821562f";
 
-function isRealLastfmImage(url = "") {
-  if (!url) return false;
-  return !url.includes(LASTFM_PLACEHOLDER_FRAGMENT);
-}
+const LASTFM_PLACEHOLDER_FRAGMENT = "2a96cbd8b46e442fc41c2b86b821562f"; // default avatar hash[web:425]
 
 function pickImage(images) {
-  if (!Array.isArray(images)) return "";
-  const order = ["mega", "extralarge", "large", "medium", "small"];
+  if (!Array.isArray(images)) return { url: "", isPlaceholder: false };
 
-  // prefer real, non-placeholder images in size order
-  for (const size of order) {
-    const img = images.find(i => i.size === size && isRealLastfmImage(i["#text"]));
-    if (img) return img["#text"];
-  }
+  // first non-empty url
+  const any = images.find(i => i && i["#text"]);
+  if (!any) return { url: "", isPlaceholder: false };
 
-  // final fallback: first real image of any size
-  const anyReal = images.find(i => isRealLastfmImage(i["#text"]));
-  return anyReal ? anyReal["#text"] : "";
+  const url = any["#text"];
+  const isPlaceholder = url.includes(LASTFM_PLACEHOLDER_FRAGMENT);
+  return { url: isPlaceholder ? "" : url, isPlaceholder };
 }
 
 export default async function handler(req, res) {
