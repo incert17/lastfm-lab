@@ -1,5 +1,7 @@
 // api/wrapped.js
 
+import albumArt from "album-art"; // uses Spotify under the hood for images[web:453]
+
 const ALLOWED_ORIGINS = [
   "https://your-main-site.example",     // replace with your main site
   "https://lastfm-lab.vercel.app"      // adjust as needed
@@ -17,17 +19,6 @@ const PERIOD_LABELS = {
   "12month":"past year",
   "overall":"overall"
 };
-
-// default avatar hash used in Last.fm placeholder images[web:425]
-const LASTFM_PLACEHOLDER_FRAGMENT = "2a96cbd8b46e442fc41c2b86b821562f";
-
-function pickImage(images) {
-  if (!Array.isArray(images)) return "";
-  const any = images.find(i => i && i["#text"]);
-  if (!any) return "";
-  const url = any["#text"] || "";
-  return url.includes(LASTFM_PLACEHOLDER_FRAGMENT) ? "" : url;
-}
 
 export default async function handler(req, res) {
   // ----- CORS -----
@@ -72,7 +63,7 @@ export default async function handler(req, res) {
   ); // [web:324]
   const userInfoUrl   = params(
     `method=user.getInfo&user=${encodeURIComponent(username)}`
-  ); // [web:337][web:335] (mostly for logging / possible future use)
+  ); // [web:337][web:335]
 
   console.log("wrapped: starting", {
     username,
@@ -144,21 +135,55 @@ export default async function handler(req, res) {
     const totalArtistsDistinct =
       Number(artistsAttr.total) || artistsArr.length || 0;   // distinct artists in period[web:324][web:323]
 
+    // ----- optional: upgrade top 1 art via album-art -----
+    let topTrackCover = "";
+    let topArtistCover = "";
+
+    try {
+      const topTrackRaw = tracksArr[0];
+      if (topTrackRaw) {
+        const trackName = topTrackRaw.name || "";
+        const artistName =
+          topTrackRaw.artist?.name ||
+          topTrackRaw.artist?.["#text"] ||
+          "";
+        if (artistName && trackName) {
+          topTrackCover = await albumArt(artistName, {
+            album: trackName,
+            size: "large"
+          }).catch(() => "");
+        }
+      }
+    } catch (e) {
+      console.error("wrapped: album-art top track failed", e);
+    }
+
+    try {
+      const topArtistRaw = artistsArr[0];
+      if (topArtistRaw && topArtistRaw.name) {
+        topArtistCover = await albumArt(topArtistRaw.name, {
+          size: "large"
+        }).catch(() => "");
+      }
+    } catch (e) {
+      console.error("wrapped: album-art top artist failed", e);
+    }
+
     // ----- top tracks / artists arrays -----
-    const topTracks = tracksArr.map((t) => ({
+    const topTracks = tracksArr.map((t, idx) => ({
       name: t.name || "",
       artist:
         t.artist?.name ||
         t.artist?.["#text"] ||
         "",
       playcount: Number(t.playcount) || 0,
-      image: t.image
+      image: idx === 0 && topTrackCover ? topTrackCover : ""
     }));
 
-    const topArtists = artistsArr.map((a) => ({
+    const topArtists = artistsArr.map((a, idx) => ({
       name: a.name || "",
       playcount: Number(a.playcount) || 0,
-      image: a.image
+      image: idx === 0 && topArtistCover ? topArtistCover : ""
     }));
 
     const periodLabel = PERIOD_LABELS[safePeriod] || "past while";

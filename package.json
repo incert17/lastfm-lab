@@ -17,5 +17,8 @@
   "bugs": {
     "url": "https://github.com/incert17/lastfm-lab/issues"
   },
-  "homepage": "https://github.com/incert17/lastfm-lab#readme"
+  "homepage": "https://github.com/incert17/lastfm-lab#readme",
+  "dependencies": {
+    "album-art": "^4.0.0"
+  }
 }
