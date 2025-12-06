@@ -674,7 +674,7 @@
         `@${user} on last.fm`;
     }
 
-    function applyGenres(genres) {
+    /* function applyGenres(genres) {
       const container = document.getElementById("genre-stack");
       container.innerHTML = "";
       if (!genres || !Array.isArray(genres.topGenres)) return;
@@ -695,7 +695,7 @@
         container.appendChild(chip);
         setTimeout(() => chip.classList.add("ready"), 90 * (idx + 1));
       });
-    }
+    }*/
 
     async function fetchWrapped(username, period) {
       const url = `/api/wrapped?username=${encodeURIComponent(username)}&period=${encodeURIComponent(period)}`;
@@ -704,47 +704,44 @@
       return res.json();
     }
 
-    async function fetchGenres(username, period) {
+  /*  async function fetchGenres(username, period) {
       const url = `/api/wgenres?username=${encodeURIComponent(username)}&period=${encodeURIComponent(period)}`;
       const res = await fetch(url);
       if (!res.ok) return null;
       return res.json();
-    }
+    } */
 
-    async function startStory() {
-      inputError.textContent = "";
-      const name = (usernameInput.value || "").trim();
-      if (!name) {
-        inputError.textContent = "username is required.";
-        return;
-      }
+   async function startStory() {
+  inputError.textContent = "";
+  const name = (usernameInput.value || "").trim();
+  if (!name) {
+    inputError.textContent = "username is required.";
+    return;
+  }
 
-      currentUsername = name;
+  currentUsername = name;
 
-      showScreen("story");
-      setActiveCard("card-loading");
+  showScreen("story");
+  setActiveCard("card-loading");
 
-      try {
-        const [wrapped, genres] = await Promise.all([
-          fetchWrapped(currentUsername, currentPeriod),
-          fetchGenres(currentUsername, currentPeriod)
-        ]);
+  try {
+    const wrapped = await fetchWrapped(currentUsername, currentPeriod);
+    wrappedData = wrapped;
+    applyWrappedToCards(wrappedData);
 
-        wrappedData = wrapped;
-        genresData = genres;
+    // TEMP: skip genres fetch; card-genres will just show placeholder text
+    // const genres = await fetchGenres(currentUsername, currentPeriod);
+    // if (genres) { genresData = genres; applyGenres(genresData); }
 
-        applyWrappedToCards(wrappedData);
-        if (genresData) applyGenres(genresData);
-
-        setTimeout(() => {
-          setActiveCard("card-hello");
-        }, 600);
-      } catch (err) {
-        console.error(err);
-        inputError.textContent = "couldn't load wrapped for that user/period.";
-        showScreen("input");
-      }
-    }
+    setTimeout(() => {
+      setActiveCard("card-hello");
+    }, 600);
+  } catch (err) {
+    console.error(err);
+    inputError.textContent = "couldn't load wrapped for that user/period.";
+    showScreen("input");
+  }
+}
 
     startBtn.addEventListener("click", startStory);
 
