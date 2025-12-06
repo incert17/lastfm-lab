@@ -1,910 +1,756 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>lastfm lab</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
- <style>
-  /* ---------- fonts ---------- */
-  @import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Fraunces:wght@500;600&display=swap"); /* [web:448] */
-
-  :root {
-    --bg: #020010;
-    --fg-main: #f9f5ff;
-    --fg-soft: #c7b5ff;
-    --fg-muted: #a5b4fc;
-    --accent-1: #a855f7;
-    --accent-2: #fb7185;
-    --accent-3: #22d3ee;
-  }
-
-  * {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-  }
-
-  html, body {
-    height: 100%;
-  }
-
-  body {
-    min-height: 100vh;
-    background:
-      radial-gradient(circle at top, #221638 0, var(--bg) 60%),
-      radial-gradient(circle at 120% 120%, #020617 0, #000 60%);
-    color: var(--fg-main);
-    font-family: "DM Sans", system-ui, -apple-system, BlinkMacSystemFont,
-      "SF Pro Text", "Inter", "Segoe UI", sans-serif;
-    overflow: hidden;
-    -webkit-tap-highlight-color: transparent;   /* remove blue tap overlay */
-  }
-
-  /* disable text selection/touch highlight for the stage */
-  .scene {
-    -webkit-user-select: none;
-    user-select: none;
-  }
-
-  /* ---------- scenes & motion ---------- */
-
-  .scene {
-    position: fixed;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-direction: column;
-    text-align: center;
-    opacity: 0;
-    pointer-events: none;
-    transform: translateY(16px) scale(0.985);
-    transition:
-      opacity 500ms ease-out,
-      transform 500ms cubic-bezier(0.22, 0.61, 0.36, 1);
-  }
-
-  .scene.active {
-    opacity: 1;
-    pointer-events: auto;
-    transform: translateY(0) scale(1);
-  }
-
-  /* ---------- blurred parallax blobs ---------- */
-
-  .bg-blobs {
-    position: fixed;
-    inset: -25%;
-    overflow: hidden;
-    z-index: -1;
-    filter: blur(8px);
-  }
-
-  .blob {
-    position: absolute;
-    width: 44vmax;
-    height: 44vmax;
-    border-radius: 999px;
-    filter: blur(40px);
-    opacity: 0.7;
-    mix-blend-mode: screen;
-    will-change: transform;
-  }
-
-  .blob1 {
-    background: radial-gradient(circle at 30% 30%, var(--accent-1), transparent 60%);
-    animation: float1 20s ease-in-out infinite alternate;
-  }
-
-  .blob2 {
-    background: radial-gradient(circle at 60% 70%, var(--accent-2), transparent 60%);
-    animation: float2 24s ease-in-out infinite alternate;
-  }
-
-  .blob3 {
-    background: radial-gradient(circle at 80% 20%, var(--accent-3), transparent 60%);
-    animation: float3 28s ease-in-out infinite alternate;
-  }
-
-  @keyframes float1 {
-    0%   { transform: translate(-12%, -10%) scale(1); }
-    100% { transform: translate(8%, 12%) scale(1.08); }
-  }
-  @keyframes float2 {
-    0%   { transform: translate(22%, 4%) scale(1.02); }
-    100% { transform: translate(-6%, 18%) scale(0.96); }
-  }
-  @keyframes float3 {
-    0%   { transform: translate(6%, -14%) scale(1); opacity: 0.35; }
-    100% { transform: translate(-18%, 4%) scale(1.12); opacity: 0.8; }
-  }
-
-  /* ---------- typography ---------- */
-
-  .title-main {
-    font-family: "Fraunces", "DM Sans", system-ui, serif;
-    font-size: clamp(1.8rem, 4vw, 2.5rem);
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    margin-bottom: 8px;
-    opacity: 0.95;
-  }
-
-  .sub {
-    font-size: 0.9rem;
-    color: var(--fg-soft);
-    max-width: 420px;
-    margin: 0 auto;
-  }
-
-  .scene-text-main {
-    font-family: "Fraunces", system-ui, serif;
-    font-size: clamp(1.3rem, 3vw, 1.8rem);
-    max-width: 520px;
-    margin: 0 auto 10px;
-    line-height: 1.55;
-    letter-spacing: 0.02em;
-  }
-
-  .scene-text-soft {
-    font-size: 0.9rem;
-    color: rgba(203, 213, 225, 0.9);
-    max-width: 420px;
-    margin: 0 auto;
-  }
-
-  .scene-hint {
-    margin-top: 18px;
-    font-size: 0.75rem;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: rgba(148, 163, 184, 0.6);
-    animation: hintPulse 2.1s ease-in-out infinite;
-  }
-
-  @keyframes hintPulse {
-    0%, 100% { opacity: 0.25; transform: translateY(0); }
-    50%      { opacity: 0.8;  transform: translateY(-2px); }
-  }
-
-  /* ---------- inputs / chips / buttons (captcha + username) ---------- */
-
-  .math-box, .input-row, .period-row {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    margin-top: 18px;
-    flex-wrap: wrap;
-  }
-
-  input {
-    background: radial-gradient(circle at top, rgba(15,23,42,0.95), rgba(15,23,42,0.7));
-    border-radius: 999px;
-    border: 1px solid rgba(148, 163, 184, 0.5);
-    color: var(--fg-main);
-    padding: 7px 14px;
-    outline: none;
-    font-size: 0.9rem;
-    min-width: 160px;
-    transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
-  }
-
-  input::placeholder {
-    color: rgba(148, 163, 184, 0.9);
-  }
-
-  input:focus {
-    border-color: var(--accent-1);
-    box-shadow: 0 0 0 1px rgba(168, 85, 247, 0.4);
-    background: radial-gradient(circle at top, rgba(30,64,175,0.9), rgba(15,23,42,0.9));
-  }
-
-  .chip {
-    border-radius: 999px;
-    padding: 4px 11px;
-    font-size: 0.8rem;
-    border: 1px solid rgba(148, 163, 184, 0.55);
-    cursor: pointer;
-    background: rgba(15, 23, 42, 0.8);
-    color: var(--fg-muted);
-    transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease,
-      transform 0.12s ease;
-  }
-
-  .chip:hover {
-    transform: translateY(-1px);
-    border-color: rgba(248, 250, 252, 0.7);
-  }
-
-  .chip.active {
-    border-color: var(--accent-2);
-    color: var(--fg-main);
-    background: radial-gradient(circle at top, rgba(251, 113, 133, 0.4), rgba(15, 23, 42, 0.95));
-  }
-
-  .circle-btn {
-    width: 34px;
-    height: 34px;
-    border-radius: 999px;
-    border: 1px solid rgba(248, 250, 252, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    background: rgba(15, 23, 42, 0.9);
-    transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease,
-      border-color 0.18s ease;
-  }
-
-  .circle-btn:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.7);
-    background: radial-gradient(circle at top, rgba(129, 140, 248, 0.4), rgba(15,23,42,0.96));
-    border-color: rgba(248, 250, 252, 0.9);
-  }
-
-  .circle-btn span {
-    font-size: 0.9rem;
-  }
-
-  .error {
-    margin-top: 10px;
-    font-size: 0.8rem;
-    color: #fecaca;
-  }
-
-  /* ---------- hello animation ---------- */
-
-  .hello-word {
-    font-size: clamp(2.4rem, 6vw, 3.2rem);
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: lowercase;
-    margin-bottom: 4px;
-    opacity: 0;
-    transform: translateY(18px);
-    animation: helloIn 0.9s ease forwards;
-  }
-
-  .hello-name {
-    font-size: clamp(1.6rem, 4vw, 2.1rem);
-    font-family: "Fraunces", "Georgia", "Times New Roman", serif;
-    letter-spacing: 0.06em;
-    opacity: 0;
-    transform: translateY(18px);
-    animation: nameIn 0.9s ease forwards;
-    animation-delay: 0.55s;
-  }
-
-  @keyframes helloIn {
-    0% { opacity: 0; transform: translateY(18px) scale(0.96); }
-    100% { opacity: 1; transform: translateY(0) scale(1); }
-  }
-
-  @keyframes nameIn {
-    0% { opacity: 0; transform: translateY(18px) scale(0.96); }
-    100% { opacity: 1; transform: translateY(0) scale(1); }
-  }
-
-  /* ---------- art circles ---------- */
-
-  .art-circle {
-    position: relative;
-    width: 140px;
-    height: 140px;
-    border-radius: 999px;
-    overflow: hidden;
-    border: 1px solid rgba(248, 250, 252, 0.4);
-    box-shadow: 0 18px 40px rgba(0,0,0,0.85);
-    margin: 18px auto 10px;
-    background: radial-gradient(circle at top, #4c1d95, #020617);
-    transform: scale(0.92) translateY(6px);
-    opacity: 0;
-    animation: artIn 700ms ease-out forwards;
-    animation-delay: 120ms;
-  }
-
-  .art-circle::before {
-    content: "";
-    position: absolute;
-    inset: -18%;
-    border-radius: inherit;
-    background: conic-gradient(
-      from 200deg,
-      rgba(168,85,247,0.4),
-      rgba(248,250,252,0.0),
-      rgba(56,189,248,0.45),
-      rgba(248,250,252,0.0),
-      rgba(248,113,113,0.4)
-    );
-    mix-blend-mode: screen;
-    filter: blur(14px);
-    opacity: 0.8;
-    animation: artHalo 22s linear infinite;
-  }
-
-  .art-circle img {
-    position: relative;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
-    border-radius: inherit;
-    z-index: 1;
-  }
-
-  @keyframes artIn {
-    0%   { opacity: 0; transform: scale(0.78) translateY(18px); }
-    100% { opacity: 1; transform: scale(1) translateY(0); }
-  }
-
-  @keyframes artHalo {
-    from { transform: rotate(0deg); }
-    to   { transform: rotate(360deg); }
-  }
-
-  /* ---------- final list ---------- */
-
-  .list-two-column {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 18px;
-    width: min(780px, 92vw);
-    margin-top: 18px;
-  }
-
-  .list-col {
-    flex: 1 1 260px;
-    text-align: left;
-    font-size: 0.9rem;
-  }
-
-  .list-heading {
-    font-size: 0.8rem;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--fg-soft);
-    margin-bottom: 8px;
-  }
-
-  .track-row, .artist-row {
-    margin-bottom: 8px;
-  }
-
-  .track-name {
-    font-weight: 500;
-  }
-
-  .track-artist {
-    font-size: 0.8rem;
-    color: var(--fg-soft);
-  }
-
-  /* ---------- genres / ribbons ---------- */
-
-  .genre-ribbon {
-    width: min(480px, 88vw);
-    height: 16px;
-    border-radius: 999px;
-    margin: 10px auto 2px;
-    position: relative;
-    overflow: hidden;
-    background: rgba(15,23,42,0.9);
-    box-shadow: inset 0 0 0 1px rgba(148,163,184,0.35);
-  }
-
-  .genre-label {
-    font-size: 0.8rem;
-    color: var(--fg-main);
-    opacity: 0.9;
-    margin-top: 3px;
-    text-transform: lowercase;
-    letter-spacing: 0.04em;
-  }
-
-  .genre-fill {
-    position: absolute;
-    inset: 0;
-    transform-origin: left;
-    background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
-    opacity: 0.95;
-    transform: scaleX(0.08);
-    transition: transform 0.8s cubic-bezier(0.22, 0.61, 0.36, 1);
-  }
-
-  .genre-ribbon.ready .genre-fill {
-    transform: scaleX(var(--fill, 1));
-  }
-
-  .genre-ribbon:nth-of-type(4n+1) .genre-fill {
-    background: linear-gradient(90deg, #a855f7, #22d3ee);
-  }
-  .genre-ribbon:nth-of-type(4n+2) .genre-fill {
-    background: linear-gradient(90deg, #f97316, #ec4899);
-  }
-  .genre-ribbon:nth-of-type(4n+3) .genre-fill {
-    background: linear-gradient(90deg, #22c55e, #14b8a6);
-  }
-
-  /* ---------- replay ---------- */
-
-  .replay-btn {
-    margin-top: 26px;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 14px;
-    border-radius: 999px;
-    border: 1px solid rgba(248,250,252,0.7);
-    background: rgba(0,0,0,0.65);
-    cursor: pointer;
-    font-size: 0.9rem;
-    transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
-  }
-
-  .replay-btn:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 10px 26px rgba(0,0,0,0.8);
-    background: radial-gradient(circle at top, rgba(148,163,184,0.3), rgba(15,23,42,0.96));
-  }
-
-  .replay-icon {
-    width: 18px;
-    height: 18px;
-    border-radius: 999px;
-    border: 1px solid rgba(248,250,252,0.7);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.7rem;
-  }
-
-  body { cursor: default; }
-  .scene.active { cursor: pointer; }
-  #scene-final { cursor: default; }
-
-  .tiny-muted {
-    font-size: 0.8rem;
-    color: var(--fg-soft);
-    margin-top: 6px;
-  }
-</style>
+  <meta charset="utf-8" />
+  <title>Last.fm Wrapped</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=DM+Sans:wght@400;500;600&display=swap"
+    rel="stylesheet"
+  /> <!-- [web:476][web:483] -->
+
+  <!-- Lottie web player -->
+  <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script> <!-- [web:490] -->
+
+  <style>
+    :root {
+      --fg-main: #f9fafb;
+      --fg-soft: #e5e7eb;
+      --fg-muted: #9ca3af;
+      --accent-a: #ff2c7d;
+      --accent-b: #36e3ff;
+      --accent-c: #ffd33b;
+      --bg-page: #020617;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body { height: 100%; }
+
+    body {
+      min-height: 100vh;
+      background: radial-gradient(circle at top, #0f172a, #020617 65%);
+      color: var(--fg-main);
+      font-family: "DM Sans", system-ui, -apple-system, BlinkMacSystemFont,
+        "SF Pro Text", "Inter", "Segoe UI", sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* ---------- layout shells ---------- */
+
+    .root-shell {
+      width: min(480px, 100vw);
+      height: min(900px, 100vh);
+      border-radius: 32px;
+      overflow: hidden;
+      background: #000;
+      box-shadow:
+        0 32px 80px rgba(0,0,0,0.9),
+        0 0 0 1px rgba(148,163,184,0.4);
+      position: relative;
+    }
+
+    .screen {
+      position: absolute;
+      inset: 0;
+      display: none;
+    }
+
+    .screen.active {
+      display: block;
+    }
+
+    /* ---------- input screen ---------- */
+
+    #screen-input {
+      background: radial-gradient(circle at top, #111827, #020617 65%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 22px;
+      text-align: center;
+    }
+
+    .logo-mark {
+      font-family: "Space Grotesk", system-ui, sans-serif;
+      font-size: 0.9rem;
+      letter-spacing: 0.26em;
+      text-transform: uppercase;
+      color: var(--fg-soft);
+      margin-bottom: 18px;
+    }
+
+    .input-title {
+      font-family: "Space Grotesk", system-ui, sans-serif;
+      font-size: 1.9rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .input-sub {
+      font-size: 0.9rem;
+      color: var(--fg-muted);
+      max-width: 320px;
+      margin: 0 auto 24px;
+    }
+
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      width: 100%;
+      max-width: 320px;
+      margin-bottom: 18px;
+    }
+
+    .input-label {
+      text-align: left;
+      font-size: 0.8rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--fg-soft);
+    }
+
+    #username {
+      width: 100%;
+      border-radius: 999px;
+      border: 1px solid rgba(148,163,184,0.7);
+      background: rgba(15,23,42,0.95);
+      padding: 8px 14px;
+      font-size: 0.9rem;
+      color: var(--fg-main);
+      outline: none;
+      transition: border-color 160ms ease, box-shadow 160ms ease, transform 120ms ease;
+    }
+
+    #username::placeholder {
+      color: rgba(148,163,184,0.9);
+    }
+
+    #username:focus {
+      border-color: var(--accent-a);
+      box-shadow: 0 0 0 1px rgba(248,113,113,0.4);
+      transform: translateY(-1px);
+    }
+
+    .period-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .chip {
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 0.8rem;
+      border: 1px solid rgba(148,163,184,0.6);
+      background: rgba(15,23,42,0.95);
+      color: var(--fg-soft);
+      cursor: pointer;
+      transition: border-color 150ms ease, background 150ms ease, color 150ms ease,
+        transform 100ms ease;
+    }
+
+    .chip:hover {
+      transform: translateY(-1px);
+      border-color: rgba(248,250,252,0.9);
+    }
+
+    .chip.active {
+      border-color: var(--accent-b);
+      background: radial-gradient(circle at top, rgba(54,227,255,0.4), rgba(15,23,42,0.98));
+      color: var(--fg-main);
+    }
+
+    #start-btn {
+      margin-top: 20px;
+      padding: 8px 20px;
+      border-radius: 999px;
+      border: none;
+      background: linear-gradient(90deg, var(--accent-a), var(--accent-b));
+      color: #020617;
+      font-size: 0.9rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      cursor: pointer;
+      box-shadow: 0 16px 35px rgba(15,23,42,0.9);
+      transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
+    }
+
+    #start-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 20px 40px rgba(0,0,0,0.9);
+      filter: brightness(1.05);
+    }
+
+    #input-error {
+      margin-top: 10px;
+      font-size: 0.8rem;
+      color: #fecaca;
+      min-height: 1em;
+    }
+
+    /* ---------- story shell ---------- */
+
+    #screen-story {
+      background: #000;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(24px) scale(0.96);
+      transition: opacity 260ms ease-out, transform 260ms ease-out;
+    }
+
+    .card.active {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0) scale(1);
+    }
+
+    .card-lottie {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+    }
+
+    .card-foreground {
+      position: relative;
+      z-index: 1;
+      text-align: center;
+      padding: 32px 26px;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .cf-kicker {
+      font-family: "Space Grotesk", system-ui, sans-serif;
+      font-size: 0.95rem;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      color: var(--fg-soft);
+      margin-bottom: 14px;
+    }
+
+    .cf-title {
+      font-family: "Space Grotesk", system-ui, sans-serif;
+      font-size: 1.9rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      max-width: 18ch;
+      margin-bottom: 10px;
+    }
+
+    .cf-sub {
+      font-size: 0.9rem;
+      color: var(--fg-muted);
+      max-width: 28ch;
+    }
+
+    .cf-stat {
+      font-family: "Space Grotesk", system-ui, sans-serif;
+      font-weight: 600;
+      font-size: 3.2rem;
+      letter-spacing: 0.06em;
+      margin: 10px 0 6px;
+    }
+
+    .cf-caption {
+      font-size: 0.9rem;
+      color: var(--fg-soft);
+      max-width: 26ch;
+    }
+
+    .cf-username {
+      margin-top: 6px;
+      font-size: 0.9rem;
+      color: var(--fg-muted);
+    }
+
+    /* top track cover */
+    .cf-art {
+      width: 190px;
+      height: 190px;
+      border-radius: 24px;
+      overflow: hidden;
+      position: relative;
+      box-shadow: 0 18px 40px rgba(0,0,0,0.85);
+      margin: 6px auto 10px;
+    }
+
+    .cf-art::before {
+      content: "";
+      position: absolute;
+      inset: -18%;
+      background: conic-gradient(
+        from 200deg,
+        rgba(255,44,125,0.6),
+        rgba(54,227,255,0.0),
+        rgba(54,227,255,0.5),
+        rgba(255,44,125,0.0),
+        rgba(255,211,59,0.7)
+      );
+      mix-blend-mode: screen;
+      filter: blur(14px);
+    }
+
+    .cf-art img {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: inherit;
+      z-index: 1;
+    }
+
+    .cf-track-title {
+      font-size: 1.2rem;
+      letter-spacing: 0.03em;
+      margin-top: 4px;
+    }
+
+    .cf-track-artist {
+      margin-top: 2px;
+      font-size: 0.9rem;
+      color: var(--fg-soft);
+    }
+
+    /* genres stack */
+    #genre-stack {
+      width: 100%;
+      max-width: 280px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .genre-chip {
+      position: relative;
+      height: 40px;
+      border-radius: 999px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.9rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #020617;
+      box-shadow: 0 14px 35px rgba(0,0,0,0.7);
+      transform: translateY(12px) scale(0.96);
+      opacity: 0;
+      transition: opacity 320ms ease-out, transform 320ms ease-out;
+    }
+
+    .genre-chip.ready {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+
+    .genre-chip::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, var(--accent-a), var(--accent-b));
+      z-index: -1;
+    }
+
+    .genre-chip span {
+      position: relative;
+      z-index: 1;
+    }
+
+    /* story footer actions */
+    .story-footer {
+      position: absolute;
+      inset-inline: 0;
+      bottom: 14px;
+      display: flex;
+      justify-content: space-between;
+      padding: 0 18px;
+      font-size: 0.78rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--fg-soft);
+      z-index: 2;
+    }
+
+    .story-link {
+      cursor: pointer;
+      opacity: 0.85;
+    }
+
+    .story-link:hover {
+      opacity: 1;
+    }
+
+    .hidden { display: none; }
+  </style>
 </head>
+
 <body>
-  <div class="bg-blobs">
-    <div class="blob blob1"></div>
-    <div class="blob blob2"></div>
-    <div class="blob blob3"></div>
+  <div class="root-shell">
+    <!-- INPUT SCREEN -->
+    <section class="screen active" id="screen-input">
+      <div class="logo-mark">last.fm wrapped</div>
+      <div class="input-title">tune your recap</div>
+      <p class="input-sub">enter a last.fm username and a time window to generate a wrapped‑style story.</p>
+
+      <div class="input-group">
+        <label class="input-label" for="username">username</label>
+        <input id="username" type="text" placeholder="e.g. mylastfmuser" autocomplete="off" />
+      </div>
+
+      <div class="input-group">
+        <div class="input-label">period</div>
+        <div class="period-row" id="period-row">
+          <button class="chip active" data-period="7day">7 days</button>
+          <button class="chip" data-period="1month">1 month</button>
+          <button class="chip" data-period="3month">3 months</button>
+          <button class="chip" data-period="6month">6 months</button>
+          <button class="chip" data-period="12month">1 year</button>
+          <button class="chip" data-period="overall">overall</button>
+        </div>
+      </div>
+
+      <button id="start-btn">see my wrapped</button>
+      <div id="input-error"></div>
+    </section>
+
+    <!-- STORY SCREEN (LOADING + CARDS) -->
+    <section class="screen" id="screen-story">
+      <!-- Card 0: loading -->
+      <section class="card active" id="card-loading">
+        <lottie-player
+          class="card-lottie"
+          src="https://lottie.host/7a70c3c6-3a6c-46de-bd2a-ccf5ca3b0f5d/4fAVW5.json"
+          background="transparent"
+          speed="1"
+          loop
+          autoplay>
+        </lottie-player>
+        <div class="card-foreground">
+          <div class="cf-kicker">hold on</div>
+          <div class="cf-title">we're tuning your year</div>
+          <p class="cf-sub">fetching your scrobbles and shaping them into something shareable.</p>
+        </div>
+      </section>
+
+      <!-- Card 1: greeting -->
+      <section class="card" id="card-hello">
+        <lottie-player
+          class="card-lottie"
+          src="https://lottie.host/7a70c3c6-3a6c-46de-bd2a-ccf5ca3b0f5d/4fAVW5.json"
+          background="transparent"
+          speed="0.8"
+          loop
+          autoplay>
+        </lottie-player>
+        <div class="card-foreground">
+          <div class="cf-kicker">hey there</div>
+          <div class="cf-title" id="hello-title-card">@user</div>
+          <p class="cf-sub" id="hello-sub-card">here's your time on last.fm.</p>
+        </div>
+      </section>
+
+      <!-- Card 2: total scrobbles -->
+      <section class="card" id="card-total">
+        <lottie-player
+          class="card-lottie"
+          src="https://lottie.host/1a3f5de9-1d17-4731-bc39-86a9a068e20d/e9O4QF.json"
+          background="transparent"
+          speed="1"
+          loop
+          autoplay>
+        </lottie-player>
+        <div class="card-foreground">
+          <div class="cf-kicker">you pressed play</div>
+          <div class="cf-stat" id="total-value-card">0</div>
+          <div class="cf-caption" id="total-caption-card">tracks scrobbled.</div>
+        </div>
+      </section>
+
+      <!-- Card 3: top track -->
+      <section class="card" id="card-track">
+        <lottie-player
+          class="card-lottie"
+          src="https://lottie.host/69e8cefb-7a9d-4a6a-8f18-5397fce55c30/q0pgtQ.json"
+          background="transparent"
+          speed="1"
+          loop
+          autoplay>
+        </lottie-player>
+        <div class="card-foreground">
+          <div class="cf-kicker">one song ruled them all</div>
+          <div class="cf-art">
+            <img id="toptrack-art" alt="">
+          </div>
+          <div class="cf-track-title" id="toptrack-title-card">track name</div>
+          <div class="cf-track-artist" id="toptrack-artist-card">artist</div>
+        </div>
+      </section>
+
+      <!-- Card 4: genres -->
+      <section class="card" id="card-genres">
+        <lottie-player
+          class="card-lottie"
+          src="https://lottie.host/8c706a69-ecdd-4a3c-89e4-4a29db6ad9c3/hJzlzM.json"
+          background="transparent"
+          speed="1"
+          loop
+          autoplay>
+        </lottie-player>
+        <div class="card-foreground">
+          <div class="cf-kicker">the sounds around you</div>
+          <p class="cf-sub">your top genres stacked up like this:</p>
+          <div id="genre-stack"></div>
+        </div>
+      </section>
+
+      <!-- Card 5: recap -->
+      <section class="card" id="card-final">
+        <lottie-player
+          class="card-lottie"
+          src="https://lottie.host/7a70c3c6-3a6c-46de-bd2a-ccf5ca3b0f5d/4fAVW5.json"
+          background="transparent"
+          speed="0.8"
+          loop
+          autoplay>
+        </lottie-player>
+        <div class="card-foreground">
+          <div class="cf-kicker">that was your</div>
+          <div class="cf-title" id="final-period-card">last few months</div>
+          <p class="cf-sub" id="final-username-card">@user on last.fm</p>
+        </div>
+        <div class="story-footer">
+          <span class="story-link" id="change-user-link">change user</span>
+          <span class="story-link" id="replay-link">replay</span>
+        </div>
+      </section>
+    </section>
   </div>
 
-  <!-- Scene 0: math gate -->
-  <section class="scene active" id="scene-math">
-    <div class="title-main">lastfm lab</div>
-    <p class="sub">a tiny, overdramatic way to look at your last.fm listening.</p>
-
-    <div class="math-box">
-      <span id="math-question" style="font-size:0.95rem;"></span>
-      <input id="math-answer" placeholder="answer" inputmode="numeric" />
-      <button class="circle-btn" id="math-go" type="button">
-        <span>→</span>
-      </button>
-    </div>
-    <div class="error" id="math-error"></div>
-  </section>
-
-  <!-- Scene 1: username + period -->
-  <section class="scene" id="scene-input">
-    <div class="title-main">wrapped, but last.fm</div>
-    <p class="sub">type a username and a little window of time; the rest is drama.</p>
-
-    <div class="input-row">
-      <input id="user-input" placeholder="last.fm username" />
-    </div>
-
-    <div class="period-row" id="period-row">
-      <button class="chip active" data-period="7day">7d</button>
-      <button class="chip" data-period="1month">1m</button>
-      <button class="chip" data-period="3month">3m</button>
-      <button class="chip" data-period="12month">1y</button>
-      <button class="chip" data-period="overall">overall</button>
-      <button class="circle-btn" id="wrapped-go" type="button">
-        <span>→</span>
-      </button>
-    </div>
-    <div class="error" id="input-error"></div>
-  </section>
-
-  <!-- Scene 1.5: hello username -->
-  <section class="scene" id="scene-hello">
-    <div class="hello-word">hello,</div>
-    <div class="hello-name" id="hello-name"></div>
-  </section>
-
-  <!-- Scene 2: timeframe + total tracks/artist counts -->
-  <section class="scene" id="scene-1">
-    <div class="scene-text-main" id="scene1-main"></div>
-    <div class="scene-text-soft" id="scene1-soft"></div>
-  </section>
-
-  <!-- Scene 3: top track -->
-  <section class="scene" id="scene-2">
-    <div class="scene-text-main">but you kept coming back to one track:</div>
-    <div class="art-circle">
-      <img id="toptrack-art" src="" alt="top track art" />
-    </div>
-    <div class="scene-text-main" id="toptrack-title"></div>
-    <div class="scene-text-soft" id="toptrack-artist"></div>
-  </section>
-
-  <!-- Scene 4: artist count statement -->
-  <section class="scene" id="scene-3">
-    <div class="scene-text-main" id="scene3-main"></div>
-  </section>
-
-  <!-- Scene 5: top artist focus -->
-  <section class="scene" id="scene-4">
-    <div class="art-circle">
-      <img id="topartist-art" src="" alt="top artist art" />
-    </div>
-    <div class="scene-text-main" id="topartist-name"></div>
-    <div class="scene-text-soft" id="topartist-line"></div>
-  </section>
-
-  <!-- Scene 6: genres (optional) -->
-  <section class="scene" id="scene-5">
-    <div class="scene-text-main">the sounds around you most often were:</div>
-    <div id="genre-wrap"></div>
-    <div class="tiny-muted" id="genre-note"></div>
-  </section>
-
-  <!-- Scene 7: final summary + replay -->
-  <section class="scene" id="scene-final">
-    <div class="scene-text-main" id="final-title"></div>
-    <div class="scene-text-soft" id="final-sub"></div>
-
-    <div class="list-two-column">
-      <div class="list-col">
-        <div class="list-heading">top tracks</div>
-        <div id="final-tracks"></div>
-      </div>
-      <div class="list-col">
-        <div class="list-heading">top artists</div>
-        <div id="final-artists"></div>
-      </div>
-    </div>
-
-    <button class="replay-btn" id="replay-btn" type="button">
-      <span class="replay-icon">↻</span>
-      <span>again</span>
-    </button>
-  </section>
-
   <script>
-    // ---------- global state + caching ----------
-    let currentSceneIndex = 0;
-    const sceneOrder = [
-      "scene-math",
-      "scene-input",
-      "scene-hello",
-      "scene-1",
-      "scene-2",
-      "scene-3",
-      "scene-4",
-      "scene-5",
-      "scene-final"
-    ];
+    const DEFAULT_USERNAME = ""; // optional default
 
-    let chosenUser = "";
-    let chosenPeriod = "3month";
-    let wrappedData = null;
-    let genresPromise = null;
-    let genresResult = null;
+    const sceneInput = document.getElementById("screen-input");
+    const sceneStory = document.getElementById("screen-story");
 
-    function showScene(id) {
-      sceneOrder.forEach((sid) => {
-        const el = document.getElementById(sid);
-        if (!el) return;
-        el.classList.toggle("active", sid === id);
-      });
-      currentSceneIndex = sceneOrder.indexOf(id);
-    }
-
-    // ---------- math captcha ----------
-    const mathQ = document.getElementById("math-question");
-    const mathA = document.getElementById("math-answer");
-    const mathGo = document.getElementById("math-go");
-    const mathErr = document.getElementById("math-error");
-
-    let a = 0, b = 0, op = "+";
-
-    function newMath() {
-      a = Math.floor(Math.random() * 9) + 2;
-      b = Math.floor(Math.random() * 9) + 1;
-      op = Math.random() < 0.5 ? "+" : "-";
-      mathQ.textContent = `${a} ${op} ${b} = ?`;
-      mathA.value = "";
-      mathErr.textContent = "";
-    }
-
-    function checkMath() {
-      const val = Number((mathA.value || "").trim());
-      const correct = op === "+" ? a + b : a - b;
-      return val === correct;
-    }
-
-    mathGo.addEventListener("click", () => {
-      if (!checkMath()) {
-        mathErr.textContent = "almost. try again.";
-        newMath();
-        return;
-      }
-      showScene("scene-input");
-    });
-
-    // ---------- username + period ----------
-    const userInput = document.getElementById("user-input");
     const periodRow = document.getElementById("period-row");
-    const wrappedGo = document.getElementById("wrapped-go");
-    const inputErr = document.getElementById("input-error");
+    const usernameInput = document.getElementById("username");
+    const startBtn = document.getElementById("start-btn");
+    const inputError = document.getElementById("input-error");
 
+    const storyCards = [
+      "card-loading",
+      "card-hello",
+      "card-total",
+      "card-track",
+      "card-genres",
+      "card-final"
+    ];
+    let currentCardIndex = 0;
+
+    let currentUsername = "";
+    let currentPeriod = "7day";
+    let wrappedData = null;
+    let genresData = null;
+
+    function showScreen(which) {
+      sceneInput.classList.toggle("active", which === "input");
+      sceneStory.classList.toggle("active", which === "story");
+    }
+
+    function setActiveCard(id) {
+      storyCards.forEach(cid => {
+        const el = document.getElementById(cid);
+        if (!el) return;
+        el.classList.toggle("active", cid === id);
+      });
+      currentCardIndex = storyCards.indexOf(id);
+    }
+
+    function nextCard() {
+      if (currentCardIndex >= storyCards.length - 1) return;
+      const nextId = storyCards[currentCardIndex + 1];
+      setActiveCard(nextId);
+    }
+
+    // period chips
     periodRow.addEventListener("click", (e) => {
-      const btn = e.target.closest(".chip");
-      if (!btn) return;
-      periodRow
-        .querySelectorAll(".chip")
-        .forEach((c) => c.classList.remove("active"));
-      btn.classList.add("active");
-      chosenPeriod = btn.dataset.period || "3month";
+      const chip = e.target.closest(".chip");
+      if (!chip) return;
+      periodRow.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
+      chip.classList.add("active");
+      currentPeriod = chip.dataset.period || "7day";
     });
 
-    async function startWrapped() {
-      const u = (userInput.value || "").trim();
-      if (!u) {
-        inputErr.textContent = "username first.";
-        return;
-      }
-      chosenUser = u;
-      inputErr.textContent = "";
-
-      const helloName = document.getElementById("hello-name");
-      helloName.textContent = u;
-      showScene("scene-hello");
-
-      try {
-        const url =
-          `/api/wrapped?username=${encodeURIComponent(u)}&period=${encodeURIComponent(chosenPeriod)}`;
-        const res = await fetch(url);
-        if (!res.ok) {
-          inputErr.textContent = "couldn’t reach last.fm right now.";
-          showScene("scene-input");
-          return;
-        }
-        wrappedData = await res.json();
-        // cache in sessionStorage so replay doesn't refetch
-        sessionStorage.setItem("lastfmWrapped", JSON.stringify({
-          data: wrappedData,
-          username: chosenUser,
-          period: chosenPeriod
-        }));
-      } catch (e) {
-        console.error("wrapped fetch failed", e);
-        inputErr.textContent = "something went sideways with last.fm.";
-        showScene("scene-input");
-        return;
-      }
-
-      // kick off genres in the background now that we have topArtists
-      const artistsPayload = (wrappedData.topArtists || []).map(a => ({
-        name: a.name,
-        playcount: a.playcount
-      }));
-
-      genresPromise = fetch("/api/wgenres", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ artists: artistsPayload })
-      })
-      .then(r => (r.ok ? r.json() : null))
-      .then(json => {
-        genresResult = json;
-        return json;
-      })
-      .catch(err => {
-        console.error("wgenres fetch failed", err);
-        genresResult = null;
-        return null;
-      });
-
-      // let hello animation breathe
-      setTimeout(() => {
-        if (!wrappedData) return;
-        prepareScenesFromData(wrappedData);
-        showScene("scene-1");
-      }, 2200);
-    }
-
-    wrappedGo.addEventListener("click", startWrapped);
-
-    // ---------- prepare scenes from wrappedData ----------
-    function prepareScenesFromData(data) {
-      const s1main = document.getElementById("scene1-main");
-      const s1soft = document.getElementById("scene1-soft");
-      const totalTracks = data.totalScrobbles || 0;
-      const totalArtists = data.totalArtists || 0;
-      s1main.textContent = `for the ${data.periodLabel || "recent while"}, you scrobbled ${totalTracks} tracks.`;
-      s1soft.textContent = `you crossed paths with ${totalArtists} different artists.`;
-
-      // Scene 2 top track
-      const t = (data.topTracks || [])[0];
-      const ttArt = document.getElementById("toptrack-art");
-      const ttTitle = document.getElementById("toptrack-title");
-      const ttArtist = document.getElementById("toptrack-artist");
-
-      if (t) {
-        ttArt.src = t.image || "";
-        ttTitle.textContent = t.name || "";
-        ttArtist.textContent = t.artist || "";
-      } else {
-        ttTitle.textContent = "no top track found here.";
-        ttArtist.textContent = "";
-      }
-
-      // Scene 3 artist count
-      const s3main = document.getElementById("scene3-main");
-      s3main.textContent =
-        totalArtists > 0
-          ? `you drifted past ${totalArtists} artists, but one stayed a little louder than the rest.`
-          : `not enough artists to pick a favourite from.`;
-
-      // Scene 4 top artist
-      const a = (data.topArtists || [])[0];
-      const taArt = document.getElementById("topartist-art");
-      const taName = document.getElementById("topartist-name");
-      const taLine = document.getElementById("topartist-line");
-
-      if (a) {
-        taArt.src = a.image || "";
-        taName.textContent = a.name || "";
-        taLine.textContent = `you scrobbled them ${a.playcount || 0} times. that’s not casual.`;
-      } else {
-        taName.textContent = "no clear favourite artist.";
-        taLine.textContent = "";
-      }
-
-      // Final scene
-      const finalTitle = document.getElementById("final-title");
-      const finalSub = document.getElementById("final-sub");
-      finalTitle.textContent = `${data.username}`;
-      finalSub.textContent = `wrapped for the ${data.periodLabel || "recent while"}.`;
-
-      const finalTracks = document.getElementById("final-tracks");
-      finalTracks.innerHTML = "";
-      (data.topTracks || []).forEach((t) => {
-        const row = document.createElement("div");
-        row.className = "track-row";
-        row.innerHTML =
-          `<div class="track-name">${t.name}</div>` +
-          `<div class="track-artist">${t.artist}</div>`;
-        finalTracks.appendChild(row);
-      });
-
-      const finalArtists = document.getElementById("final-artists");
-      finalArtists.innerHTML = "";
-      (data.topArtists || []).forEach((a) => {
-        const row = document.createElement("div");
-        row.className = "artist-row";
-        row.textContent = `${a.name} · ${a.playcount} plays`;
-        finalArtists.appendChild(row);
-      });
-
-      // clear old genre ribbons if any
-      const genreWrap = document.getElementById("genre-wrap");
-      genreWrap.innerHTML = "";
-      document.getElementById("genre-note").textContent = "";
-    }
-
-    // ---------- genre scene wiring ----------
-    async function enterGenreScene() {
-      showScene("scene-5");
-      const genreWrap = document.getElementById("genre-wrap");
-      const genreNote = document.getElementById("genre-note");
-
-      genreWrap.innerHTML = "";
-      genreNote.textContent = "";
-
-      if (!genresPromise) {
-        // nothing in flight → nothing to show, user can tap to skip
-        return;
-      }
-
-      const result = genresResult || await genresPromise;
-      if (!result || !Array.isArray(result.topGenres) || !result.topGenres.length) {
-        genreNote.textContent = ""; // stay silent, just let tap skip
-        return;
-      }
-
-      result.topGenres.forEach((g, idx) => {
-        const ribbon = document.createElement("div");
-        ribbon.className = "genre-ribbon";
-        ribbon.style.setProperty("--fill", Math.max(0.2, g.weight || 0.1));
-        const fill = document.createElement("div");
-        fill.className = "genre-fill";
-        ribbon.appendChild(fill);
-        const label = document.createElement("div");
-        label.className = "genre-label";
-        label.textContent = g.name;
-        genreWrap.appendChild(ribbon);
-        genreWrap.appendChild(label);
-        setTimeout(() => ribbon.classList.add("ready"), 80 * (idx + 1));
-      });
-    }
-
-    // ---------- scene click progression ----------
-    function nextScene() {
-      const idx = currentSceneIndex;
-      const nextIdx = idx + 1;
-      if (nextIdx >= sceneOrder.length) return;
-      const nextId = sceneOrder[nextIdx];
-      showScene(nextId);
-      if (nextId === "scene-5") {
-        // entering genre scene
-        enterGenreScene();
-      }
-    }
-
-    ["scene-1","scene-2","scene-3","scene-4","scene-5"].forEach((id) => {
-      const el = document.getElementById(id);
-      el.addEventListener("click", () => nextScene());
+    // tap to advance cards (except final)
+    sceneStory.addEventListener("click", (e) => {
+      const card = e.target.closest(".card");
+      if (!card) return;
+      if (card.id === "card-final") return;
+      nextCard();
     });
 
-    const replayBtn = document.getElementById("replay-btn");
-    replayBtn.addEventListener("click", () => {
-      const cached = sessionStorage.getItem("lastfmWrapped");
-      if (!cached) return;
-      try {
-        const parsed = JSON.parse(cached);
-        wrappedData = parsed.data;
-        chosenUser = parsed.username;
-        chosenPeriod = parsed.period;
-      } catch {
-        return;
-      }
+    document.getElementById("replay-link").addEventListener("click", (e) => {
+      e.stopPropagation();
       if (!wrappedData) return;
-      const helloName = document.getElementById("hello-name");
-      helloName.textContent = wrappedData.username;
-      prepareScenesFromData(wrappedData);
-
-      // restart genres in background based on cached data
-      const artistsPayload = (wrappedData.topArtists || []).map(a => ({
-        name: a.name,
-        playcount: a.playcount
-      }));
-      genresResult = null;
-      genresPromise = fetch("/api/wgenres", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ artists: artistsPayload })
-      })
-      .then(r => (r.ok ? r.json() : null))
-      .then(json => {
-        genresResult = json;
-        return json;
-      })
-      .catch(err => {
-        console.error("wgenres fetch failed (replay)", err);
-        genresResult = null;
-        return null;
-      });
-
-      showScene("scene-hello");
-      setTimeout(() => {
-        showScene("scene-1");
-      }, 2200);
+      setActiveCard("card-hello");
     });
 
-    // init
-    newMath();
+    document.getElementById("change-user-link").addEventListener("click", (e) => {
+      e.stopPropagation();
+      showScreen("input");
+    });
+
+    function countUp(element, target, duration = 800) {
+      const start = 0;
+      const startTime = performance.now();
+      function tick(now) {
+        const elapsed = now - startTime;
+        const t = Math.min(1, elapsed / duration);
+        const value = Math.round(start + (target - start) * t);
+        element.textContent = value.toLocaleString();
+        if (t < 1) requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    }
+
+    function applyWrappedToCards(data) {
+      const user = data.username || currentUsername;
+      const periodLabel = data.periodLabel || "";
+
+      document.getElementById("hello-title-card").textContent = `@${user}`;
+      document.getElementById("hello-sub-card").textContent =
+        periodLabel ? `here's your ${periodLabel} on last.fm.` : "here's your time on last.fm.";
+
+      const total = Number(data.totalScrobbles) || 0;
+      const totalEl = document.getElementById("total-value-card");
+      totalEl.textContent = "0";
+      countUp(totalEl, total);
+
+      document.getElementById("total-caption-card").textContent =
+        periodLabel ? `tracks scrobbled in ${periodLabel}.` : "tracks scrobbled.";
+
+      const topTrack = (data.topTracks || [])[0];
+      if (topTrack) {
+        const img = document.getElementById("toptrack-art");
+        img.src = topTrack.image || "";
+        img.alt = `${topTrack.name || "Track"} – ${topTrack.artist || ""}`;
+        document.getElementById("toptrack-title-card").textContent = topTrack.name || "Unknown track";
+        document.getElementById("toptrack-artist-card").textContent = topTrack.artist || "";
+      }
+
+      document.getElementById("final-period-card").textContent =
+        periodLabel || "your time";
+      document.getElementById("final-username-card").textContent =
+        `@${user} on last.fm`;
+    }
+
+    function applyGenres(genres) {
+      const container = document.getElementById("genre-stack");
+      container.innerHTML = "";
+      if (!genres || !Array.isArray(genres.topGenres)) return;
+
+      const gradients = [
+        "linear-gradient(90deg,#ff2c7d,#36e3ff)",
+        "linear-gradient(90deg,#36e3ff,#ffd33b)",
+        "linear-gradient(90deg,#ffd33b,#ff2c7d)"
+      ];
+
+      genres.topGenres.forEach((g, idx) => {
+        const chip = document.createElement("div");
+        chip.className = "genre-chip";
+        chip.style.backgroundImage = gradients[idx % gradients.length];
+        const span = document.createElement("span");
+        span.textContent = g.name;
+        chip.appendChild(span);
+        container.appendChild(chip);
+        setTimeout(() => chip.classList.add("ready"), 90 * (idx + 1));
+      });
+    }
+
+    async function fetchWrapped(username, period) {
+      const url = `/api/wrapped?username=${encodeURIComponent(username)}&period=${encodeURIComponent(period)}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("wrapped_failed");
+      return res.json();
+    }
+
+    async function fetchGenres(username, period) {
+      const url = `/api/wgenres?username=${encodeURIComponent(username)}&period=${encodeURIComponent(period)}`;
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      return res.json();
+    }
+
+    async function startStory() {
+      inputError.textContent = "";
+      const name = (usernameInput.value || "").trim();
+      if (!name) {
+        inputError.textContent = "username is required.";
+        return;
+      }
+
+      currentUsername = name;
+
+      showScreen("story");
+      setActiveCard("card-loading");
+
+      try {
+        const [wrapped, genres] = await Promise.all([
+          fetchWrapped(currentUsername, currentPeriod),
+          fetchGenres(currentUsername, currentPeriod)
+        ]);
+
+        wrappedData = wrapped;
+        genresData = genres;
+
+        applyWrappedToCards(wrappedData);
+        if (genresData) applyGenres(genresData);
+
+        setTimeout(() => {
+          setActiveCard("card-hello");
+        }, 600);
+      } catch (err) {
+        console.error(err);
+        inputError.textContent = "couldn't load wrapped for that user/period.";
+        showScreen("input");
+      }
+    }
+
+    startBtn.addEventListener("click", startStory);
+
+    if (DEFAULT_USERNAME) {
+      usernameInput.value = DEFAULT_USERNAME;
+    }
   </script>
 </body>
 </html>
