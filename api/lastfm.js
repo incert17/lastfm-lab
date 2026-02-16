@@ -1,8 +1,8 @@
 // api/lastfm.js
 
 const ALLOWED_ORIGINS = [
-  "https://ashique.gt.tc",   // put your real site origin here
-  "https://lastfm-lab.vercel.app"     // keep if you also call it from its own UI
+  "https://ashique.neocities.org",   // neocities site
+  "https://lastfm-lab.vercel.app"     // vercel api
 ];
 
 export default async function handler(req, res) {
