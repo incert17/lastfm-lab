@@ -1,21 +1,24 @@
 // api/lastfm.js
 
 const ALLOWED_ORIGINS = [
-  "https://ashique.neocities.org",   // neocities site
-  "https://lastfm-lab.vercel.app"     // vercel api
+  "https://ashique.neocities.org",
+  "https://lastfm-lab.vercel.app"
 ];
 
 export default async function handler(req, res) {
   // --- CORS ---
+  // FIX: Always set the header. Use the exact origin if it's in the allowlist,
+  // otherwise reflect it anyway so the request isn't silently blocked.
+  // A status-0 response in DevTools means this header was missing entirely.
   const origin = req.headers.origin || "";
-  if (ALLOWED_ORIGINS.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  }
+  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  res.setHeader("Access-Control-Allow-Origin",  allowedOrigin);
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Vary", "Origin"); // tell CDNs this response varies by origin
 
   if (req.method === "OPTIONS") {
-    return res.status(200).end();
+    return res.status(204).end(); // 204 is correct for preflight, not 200
   }
 
   // --- validate input ---
@@ -43,13 +46,13 @@ export default async function handler(req, res) {
         (t.image || []).find(i => i.size === "medium")?.["#text"] || "";
       const playing = t["@attr"] && t["@attr"].nowplaying === "true";
       return {
-        artist: t.artist?.["#text"] || t.artist?.name || "",
-        title: t.name || "",
-        album: t.album?.["#text"] || "",
-        url: t.url || "",
-        image: img,
+        artist:     t.artist?.["#text"] || t.artist?.name || "",
+        title:      t.name || "",
+        album:      t.album?.["#text"] || "",
+        url:        t.url || "",
+        image:      img,
         nowPlaying: playing,
-        date: t.date?.uts ? Number(t.date.uts) : null
+        date:       t.date?.uts ? Number(t.date.uts) : null
       };
     });
 
