@@ -1,10 +1,10 @@
 {
   "name": "lastfm-lab",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Last.fm Wrapped-style story recap",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test test/*.test.js",
+    "lint": "node --check lib/api-utils.js && node --check api/wrapped.js && node --check api/wgenres.js && node --check api/lastfm.js && node --check api/wrapper.js"
   },
   "repository": {
     "type": "git",
@@ -12,8 +12,11 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
-  "type": "commonjs",
+  "license": "GPL-2.0-only",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
   "bugs": {
     "url": "https://github.com/incert17/lastfm-lab/issues"
   },
