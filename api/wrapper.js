@@ -1,209 +1,125 @@
-// api/wrapped.js
-
-const ALLOWED_ORIGINS = [
-  "https://your-main-site.example",     // replace with your main site
-  "https://lastfm-lab.vercel.app"      // adjust if needed
-];
-
-const PERIOD_LABELS = {
-  "7day":   "last 7 days",
-  "1month": "past month",
-  "3month": "past 3 months",
-  "6month": "past 6 months",
-  "12month":"past year",
-  "overall":"overall"
-};
+import {
+  applyCors,
+  isPreflight,
+  getApiKey,
+  cleanUsername,
+  normalizePeriod,
+  periodLabel,
+  lastfmUrl,
+  fetchLastfmJson,
+  isRateLimited,
+  pickImage
+} from "../lib/api-utils.js";
 
 function monthYearFromRegistered(registered) {
-  if (!registered) return null;
-  const txt = registered["#text"] || "";
-  const datePart = txt.split(" ")[0] || "";
+  const datePart = (registered?.["#text"] || "").split(" ")[0] || "";
   const parts = datePart.split("-");
   if (parts.length < 2) return null;
-  const year = Number(parts[0]);
-  const monthIdx = Number(parts[1]) - 1;
-  const monthNames = [
-    "january","february","march","april","may","june",
-    "july","august","september","october","november","december"
-  ];
-  return {
-    month: monthNames[monthIdx] || "",
-    year
-  };
-}
 
-function pickImage(images, preferred = "extralarge") {
-  if (!Array.isArray(images)) return "";
-  const exact = images.find(i => i.size === preferred && i["#text"]);
-  if (exact) return exact["#text"];
-  const fallbacks = ["large","medium","small"];
-  for (const size of fallbacks) {
-    const img = images.find(i => i.size === size && i["#text"]);
-    if (img) return img["#text"];
-  }
-  return "";
+  const monthNames = [
+    "january", "february", "march", "april", "may", "june",
+    "july", "august", "september", "october", "november", "december"
+  ];
+  const month = monthNames[Number(parts[1]) - 1] || "";
+  return month ? { month, year: Number(parts[0]) || null } : null;
 }
 
 export default async function handler(req, res) {
-  // ----- CORS -----
-  const origin = req.headers.origin || "";
-  if (ALLOWED_ORIGINS.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  }
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
-
+  applyCors(req, res);
+  if (isPreflight(req, res)) return;
   if (req.method !== "GET") {
     return res.status(405).json({ error: "method_not_allowed" });
   }
+  if (isRateLimited(req)) {
+    return res.status(429).json({ error: "rate_limited" });
+  }
 
-  const { username, period = "3month" } = req.query;
-
+  const username = cleanUsername(req.query?.username);
   if (!username) {
-    return res.status(400).json({ error: "missing_username" });
+    return res.status(400).json({ error: "invalid_username" });
   }
 
-  const API_KEY = process.env.LASTFM_API_KEY;
-  if (!API_KEY) {
-    return res.status(500).json({ error: "missing_api_key" });
-  }
+  const apiKey = getApiKey(res);
+  if (!apiKey) return;
 
-  const safePeriod =
-    ["7day","1month","3month","6month","12month","overall"].includes(period)
-      ? period
-      : "3month";
-
-  const base = "https://ws.audioscrobbler.com/2.0/";
-  const params = (extra) =>
-    `${base}?${extra}&api_key=${API_KEY}&format=json`;
-
-  const topTracksUrl  = params(
-    `method=user.getTopTracks&user=${encodeURIComponent(username)}&period=${safePeriod}&limit=50`
-  ); // [web:323][web:326]
-  const topArtistsUrl = params(
-    `method=user.getTopArtists&user=${encodeURIComponent(username)}&period=${safePeriod}&limit=50`
-  ); // [web:324]
-  const userInfoUrl   = params(
-    `method=user.getInfo&user=${encodeURIComponent(username)}`
-  ); // [web:337]
+  const period = normalizePeriod(req.query?.period);
 
   try {
-    const [tracksRes, artistsRes, userRes] = await Promise.all([
-      fetch(topTracksUrl),
-      fetch(topArtistsUrl),
-      fetch(userInfoUrl)
-    ]);
-
-    async function safeJson(r) {
-      try {
-        const j = await r.json();
-        if (j && j.error) return {};
-        return j || {};
-      } catch {
-        return {};
-      }
-    }
-
     const [tracksJson, artistsJson, userJson] = await Promise.all([
-      safeJson(tracksRes),
-      safeJson(artistsRes),
-      safeJson(userRes)
+      fetchLastfmJson(
+        lastfmUrl(apiKey, "user.getTopTracks", { user: username, period, limit: 50 }),
+        "topTracks"
+      ),
+      fetchLastfmJson(
+        lastfmUrl(apiKey, "user.getTopArtists", { user: username, period, limit: 50 }),
+        "topArtists"
+      ),
+      fetchLastfmJson(
+        lastfmUrl(apiKey, "user.getInfo", { user: username }),
+        "userInfo"
+      )
     ]);
 
-    const tracksArr  = tracksJson.toptracks?.track || [];
+    const tracksArr = tracksJson.toptracks?.track || [];
     const artistsArr = artistsJson.topartists?.artist || [];
-
-    // total from tracks for this period
-    let totalFromTracks = 0;
-    for (const t of tracksArr) {
-      const pc = Number(t.playcount) || 0;
-      totalFromTracks += pc;
-    }
-
-    // all-time total from user.getInfo[web:337]
-    const globalPlaycount = Number(userJson.user?.playcount) || 0;
-
-    let totalScrobbles;
-    if (safePeriod === "overall") {
-      totalScrobbles = globalPlaycount || totalFromTracks;
-    } else {
-      totalScrobbles = totalFromTracks;
-    }
-
-    // total artist count across pages[web:324][web:323]
+    const tracksAttr = tracksJson.toptracks?.["@attr"] || {};
     const artistsAttr = artistsJson.topartists?.["@attr"] || {};
-    const totalArtistCount =
-      Number(artistsAttr.total) || artistsArr.length || 0;
 
-    // top track
-    const topTrackRaw = tracksArr[0];
-    const topTrack = topTrackRaw
-      ? {
-          name: topTrackRaw.name || "",
-          artist:
-            topTrackRaw.artist?.name ||
-            topTrackRaw.artist?.["#text"] ||
-            "",
-          playcount: Number(topTrackRaw.playcount) || 0,
-          image: pickImage(topTrackRaw.image)
-        }
-      : null;
-
-    // top artist
-    const topArtistRaw = artistsArr[0];
-    const topArtist = topArtistRaw
-      ? {
-          name: topArtistRaw.name || "",
-          playcount: Number(topArtistRaw.playcount) || 0,
-          image: pickImage(topArtistRaw.image)
-        }
-      : null;
-
-    // lists
-    const topTracks = tracksArr.slice(0, 10).map((t) => ({
-      name: t.name || "",
-      artist:
-        t.artist?.name ||
-        t.artist?.["#text"] ||
-        "",
-      playcount: Number(t.playcount) || 0
-    }));
-
-    const topArtists = artistsArr.slice(0, 5).map((a) => ({
-      name: a.name || "",
-      playcount: Number(a.playcount) || 0
-    }));
-
-    const baseLabel = PERIOD_LABELS[safePeriod] || "past while";
-
-    let since = null;
-    if (safePeriod === "overall") {
-      const registered = userJson.user?.registered;
-      since = monthYearFromRegistered(registered);
-    }
+    const playcountSum = tracksArr.reduce(
+      (sum, track) => sum + (Number(track.playcount) || 0),
+      0
+    );
+    const allTimePlaycount = Number(userJson.user?.playcount) || 0;
 
     const response = {
       username,
-      period: safePeriod,
-      periodLabel: baseLabel,
-      since,
-      totalScrobbles,
-      totalArtistCount,
-      topTrack,
-      topArtist,
-      topGenres: [],   // filled by wgenres.js later
-      topTracks,
-      topArtists
+      period,
+      periodLabel: periodLabel(period),
+      since: period === "overall"
+        ? monthYearFromRegistered(userJson.user?.registered)
+        : null,
+      totalScrobbles: period === "overall"
+        ? allTimePlaycount || playcountSum
+        : playcountSum,
+      totalArtistCount: Number(artistsAttr.total) || artistsArr.length || 0,
+      totalTrackCount: Number(tracksAttr.total) || tracksArr.length || 0,
+      topTrack: tracksArr[0]
+        ? {
+            name: tracksArr[0].name || "",
+            artist:
+              tracksArr[0].artist?.name || tracksArr[0].artist?.["#text"] || "",
+            playcount: Number(tracksArr[0].playcount) || 0,
+            image: pickImage(tracksArr[0].image)
+          }
+        : null,
+      topArtist: artistsArr[0]
+        ? {
+            name: artistsArr[0].name || "",
+            playcount: Number(artistsArr[0].playcount) || 0,
+            image: pickImage(artistsArr[0].image)
+          }
+        : null,
+      topGenres: [],
+      topTracks: tracksArr.slice(0, 10).map((track) => ({
+        name: track.name || "",
+        artist: track.artist?.name || track.artist?.["#text"] || "",
+        playcount: Number(track.playcount) || 0,
+        image: pickImage(track.image)
+      })),
+      topArtists: artistsArr.slice(0, 10).map((artist) => ({
+        name: artist.name || "",
+        playcount: Number(artist.playcount) || 0,
+        image: pickImage(artist.image)
+      }))
     };
 
-    res.setHeader("Cache-Control", "s-maxage=300");
+    res.setHeader("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
     return res.status(200).json(response);
-  } catch (e) {
-    console.error("wrapped error", e);
-    return res.status(502).json({ error: "wrapped_failed" });
+  } catch (error) {
+    console.error("wrapper: request failed", error.message);
+    if (!res.headersSent) {
+      return res.status(502).json({ error: "lastfm_failed" });
+    }
+    return res.end();
   }
 }

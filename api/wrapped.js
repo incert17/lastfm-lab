@@ -1,216 +1,112 @@
-// api/wrapped.js
-
-import albumArt from "album-art"; // uses Spotify under the hood for images[web:453]
-
-const ALLOWED_ORIGINS = [
-  "https://your-main-site.example",     // replace with your main site
-  "https://lastfm-lab.vercel.app"      // adjust as needed
-];
-
-const VALID_PERIODS = [
-  "7day","1month","3month","6month","12month","overall"
-];
-
-const PERIOD_LABELS = {
-  "7day":   "last 7 days",
-  "1month": "past month",
-  "3month": "past 3 months",
-  "6month": "past 6 months",
-  "12month":"past year",
-  "overall":"overall"
-};
+import albumArt from "album-art";
+import {
+  applyCors,
+  isPreflight,
+  getApiKey,
+  cleanUsername,
+  normalizePeriod,
+  periodLabel,
+  lastfmUrl,
+  fetchLastfmJson,
+  withTimeout,
+  isRateLimited,
+  pickImage
+} from "../lib/api-utils.js";
 
 export default async function handler(req, res) {
-  // ----- CORS -----
-  const origin = req.headers.origin || "";
-  if (ALLOWED_ORIGINS.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  }
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
-
+  applyCors(req, res);
+  if (isPreflight(req, res)) return;
   if (req.method !== "GET") {
     return res.status(405).json({ error: "method_not_allowed" });
   }
+  if (isRateLimited(req)) {
+    return res.status(429).json({ error: "rate_limited" });
+  }
 
-  const { username, period = "3month" } = req.query;
-
+  const username = cleanUsername(req.query?.username);
   if (!username) {
-    return res.status(400).json({ error: "missing_username" });
+    return res.status(400).json({ error: "invalid_username" });
   }
 
-  const API_KEY = process.env.LASTFM_API_KEY;
-  if (!API_KEY) {
-    console.error("wrapped: LASTFM_API_KEY is missing");
-    return res.status(500).json({ error: "missing_api_key" });
-  }
+  const apiKey = getApiKey(res);
+  if (!apiKey) return;
 
-  const safePeriod = VALID_PERIODS.includes(period) ? period : "3month";
-
-  const base = "https://ws.audioscrobbler.com/2.0/";
-  const params = (extra) =>
-    `${base}?${extra}&api_key=${API_KEY}&format=json`;
-
-  const topTracksUrl  = params(
-    `method=user.getTopTracks&user=${encodeURIComponent(username)}&period=${safePeriod}&limit=10`
-  ); // [web:323][web:326]
-  const topArtistsUrl = params(
-    `method=user.getTopArtists&user=${encodeURIComponent(username)}&period=${safePeriod}&limit=10`
-  ); // [web:324]
-  const userInfoUrl   = params(
-    `method=user.getInfo&user=${encodeURIComponent(username)}`
-  ); // [web:337][web:335]
-
-  console.log("wrapped: starting", {
-    username,
-    period: safePeriod,
-    topTracksUrl,
-    topArtistsUrl,
-    userInfoUrl
-  });
+  const period = normalizePeriod(req.query?.period);
 
   try {
-    const [tracksRes, artistsRes, userRes] = await Promise.all([
-      fetch(topTracksUrl),
-      fetch(topArtistsUrl),
-      fetch(userInfoUrl)
-    ]);
-
-    console.log("wrapped: response statuses", {
-      tracks: tracksRes.status,
-      artists: artistsRes.status,
-      user: userRes.status
-    });
-
-    async function safeJson(name, r) {
-      try {
-        const txt = await r.text();
-        if (!txt) {
-          console.warn(`wrapped: empty body from ${name}`);
-          return {};
-        }
-        let j;
-        try {
-          j = JSON.parse(txt);
-        } catch (parseErr) {
-          console.error(`wrapped: JSON parse error from ${name}`, parseErr, txt.slice(0, 200));
-          return {};
-        }
-        if (j && j.error) {
-          console.error(`wrapped: logical error from ${name}`, j);
-          return {};
-        }
-        return j || {};
-      } catch (err) {
-        console.error(`wrapped: safeJson failed for ${name}`, err);
-        return {};
-      }
-    }
-
     const [tracksJson, artistsJson, userJson] = await Promise.all([
-      safeJson("topTracks", tracksRes),
-      safeJson("topArtists", artistsRes),
-      safeJson("userInfo", userRes)
+      fetchLastfmJson(
+        lastfmUrl(apiKey, "user.getTopTracks", { user: username, period, limit: 10 }),
+        "topTracks"
+      ),
+      fetchLastfmJson(
+        lastfmUrl(apiKey, "user.getTopArtists", { user: username, period, limit: 10 }),
+        "topArtists"
+      ),
+      fetchLastfmJson(
+        lastfmUrl(apiKey, "user.getInfo", { user: username }),
+        "userInfo"
+      )
     ]);
 
-    console.log("wrapped: shapes", {
-      hasTracks: !!tracksJson.toptracks,
-      hasArtists: !!artistsJson.topartists,
-      hasUser: !!userJson.user
-    });
-
-    const tracksArr  = tracksJson.toptracks?.track || [];
+    const tracksArr = tracksJson.toptracks?.track || [];
     const artistsArr = artistsJson.topartists?.artist || [];
-
-    // ----- totals from @attr -----
-    const tracksAttr  = tracksJson.toptracks?.["@attr"] || {};
+    const tracksAttr = tracksJson.toptracks?.["@attr"] || {};
     const artistsAttr = artistsJson.topartists?.["@attr"] || {};
 
-    const totalTracksDistinct  =
-      Number(tracksAttr.total)  || tracksArr.length || 0;   // distinct tracks in period[web:323][web:326]
-    const totalArtistsDistinct =
-      Number(artistsAttr.total) || artistsArr.length || 0;   // distinct artists in period[web:324][web:323]
+    const topTrackRaw = tracksArr[0];
+    const topArtistRaw = artistsArr[0];
 
-    // ----- optional: upgrade top 1 art via album-art -----
-    let topTrackCover = "";
-    let topArtistCover = "";
+    const trackName = topTrackRaw?.name || "";
+    const trackArtist =
+      topTrackRaw?.artist?.name || topTrackRaw?.artist?.["#text"] || "";
+    const artistName = topArtistRaw?.name || "";
 
-    try {
-      const topTrackRaw = tracksArr[0];
-      if (topTrackRaw) {
-        const trackName = topTrackRaw.name || "";
-        const artistName =
-          topTrackRaw.artist?.name ||
-          topTrackRaw.artist?.["#text"] ||
-          "";
-        if (artistName && trackName) {
-          topTrackCover = await albumArt(artistName, {
-            album: trackName,
-            size: "large"
-          }).catch(() => "");
-        }
-      }
-    } catch (e) {
-      console.error("wrapped: album-art top track failed", e);
-    }
+    const spotifyTrackCover = trackName && trackArtist
+      ? await withTimeout(
+          albumArt(trackArtist, { album: trackName, size: "large" }),
+          3000,
+          ""
+        )
+      : "";
+    const spotifyArtistCover = artistName
+      ? await withTimeout(albumArt(artistName, { size: "large" }), 3000, "")
+      : "";
 
-    try {
-      const topArtistRaw = artistsArr[0];
-      if (topArtistRaw && topArtistRaw.name) {
-        topArtistCover = await albumArt(topArtistRaw.name, {
-          size: "large"
-        }).catch(() => "");
-      }
-    } catch (e) {
-      console.error("wrapped: album-art top artist failed", e);
-    }
-
-    // ----- top tracks / artists arrays -----
-    const topTracks = tracksArr.map((t, idx) => ({
-      name: t.name || "",
-      artist:
-        t.artist?.name ||
-        t.artist?.["#text"] ||
-        "",
-      playcount: Number(t.playcount) || 0,
-      image: idx === 0 && topTrackCover ? topTrackCover : ""
+    const topTracks = tracksArr.slice(0, 10).map((track, index) => ({
+      name: track.name || "",
+      artist: track.artist?.name || track.artist?.["#text"] || "",
+      playcount: Number(track.playcount) || 0,
+      image:
+        (index === 0 && (spotifyTrackCover || pickImage(track.image))) || ""
     }));
 
-    const topArtists = artistsArr.map((a, idx) => ({
-      name: a.name || "",
-      playcount: Number(a.playcount) || 0,
-      image: idx === 0 && topArtistCover ? topArtistCover : ""
+    const topArtists = artistsArr.slice(0, 10).map((artist, index) => ({
+      name: artist.name || "",
+      playcount: Number(artist.playcount) || 0,
+      image:
+        (index === 0 && (spotifyArtistCover || pickImage(artist.image))) || ""
     }));
-
-    const periodLabel = PERIOD_LABELS[safePeriod] || "past while";
 
     const response = {
       username,
-      period: safePeriod,
-      periodLabel,
-      totalScrobbles: totalTracksDistinct,
-      totalArtists: totalArtistsDistinct,
-      topTracks: topTracks.slice(0, 10),
-      topArtists: topArtists.slice(0, 10)
+      period,
+      periodLabel: periodLabel(period),
+      totalTracks: Number(tracksAttr.total) || tracksArr.length || 0,
+      totalArtists: Number(artistsAttr.total) || artistsArr.length || 0,
+      totalScrobbles:
+        period === "overall" ? Number(userJson.user?.playcount) || 0 : null,
+      topTracks,
+      topArtists
     };
 
-    console.log("wrapped: success summary", {
-      totalScrobbles: response.totalScrobbles,
-      totalArtists: response.totalArtists,
-      tracksReturned: response.topTracks.length,
-      artistsReturned: response.topArtists.length
-    });
-
-    res.setHeader("Cache-Control", "s-maxage=300");
+    res.setHeader("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
     return res.status(200).json(response);
-  } catch (e) {
-    console.error("wrapped core error", e);
+  } catch (error) {
+    console.error("wrapped: request failed", error.message);
     if (!res.headersSent) {
-      return res.status(500).json({ error: "wrapped_failed" });
+      return res.status(502).json({ error: "lastfm_failed" });
     }
+    return res.end();
   }
 }

@@ -11,10 +11,7 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=DM+Sans:wght@400;500;600&display=swap"
     rel="stylesheet"
-  /> <!-- [web:476][web:483] -->
-
-  <!-- Lottie web player -->
-  <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script> <!-- [web:490] -->
+    />
 
   <style>
     :root {
@@ -187,10 +184,23 @@
       transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
     }
 
-    #start-btn:hover {
+    #start-btn:hover:not(:disabled) {
       transform: translateY(-1px);
       box-shadow: 0 20px 40px rgba(0,0,0,0.9);
       filter: brightness(1.05);
+    }
+
+    #start-btn:disabled {
+      opacity: 0.6;
+      cursor: wait;
+    }
+
+    .chip:focus-visible,
+    #start-btn:focus-visible,
+    .story-link:focus-visible,
+    .card:focus-visible {
+      outline: 2px solid var(--accent-b);
+      outline-offset: 3px;
     }
 
     #input-error {
@@ -227,12 +237,58 @@
       transform: translateY(0) scale(1);
     }
 
-    .card-lottie {
+    .card-motion {
       position: absolute;
       inset: 0;
       width: 100%;
       height: 100%;
       z-index: 0;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 15% 15%, rgba(255,44,125,0.18), transparent 48%),
+        radial-gradient(circle at 85% 80%, rgba(54,227,255,0.16), transparent 48%);
+    }
+
+    .card-motion::before,
+    .card-motion::after {
+      content: "";
+      position: absolute;
+      width: 62vmin;
+      height: 62vmin;
+      border-radius: 50%;
+      filter: blur(42px);
+      opacity: 0.55;
+    }
+
+    .card-motion::before {
+      top: -14%;
+      left: -18%;
+      background: radial-gradient(circle, var(--accent-a), transparent 70%);
+      animation: drift-a 14s ease-in-out infinite alternate;
+    }
+
+    .card-motion::after {
+      right: -16%;
+      bottom: -18%;
+      background: radial-gradient(circle, var(--accent-b), transparent 70%);
+      animation: drift-b 18s ease-in-out infinite alternate;
+    }
+
+    @keyframes drift-a {
+      from { transform: translate3d(0, 0, 0) scale(1); }
+      to { transform: translate3d(38%, 26%, 0) scale(1.25); }
+    }
+
+    @keyframes drift-b {
+      from { transform: translate3d(0, 0, 0) scale(1.15); }
+      to { transform: translate3d(-32%, -28%, 0) scale(0.9); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .card-motion::before,
+      .card-motion::after { animation: none; }
+      .card { transition: none; }
+      .genre-chip { transition: none; }
     }
 
     .card-foreground {
@@ -430,31 +486,24 @@
       <div class="input-group">
         <div class="input-label">period</div>
         <div class="period-row" id="period-row">
-          <button class="chip active" data-period="7day">7 days</button>
-          <button class="chip" data-period="1month">1 month</button>
-          <button class="chip" data-period="3month">3 months</button>
-          <button class="chip" data-period="6month">6 months</button>
-          <button class="chip" data-period="12month">1 year</button>
-          <button class="chip" data-period="overall">overall</button>
+          <button class="chip active" data-period="7day" aria-pressed="true">7 days</button>
+          <button class="chip" data-period="1month" aria-pressed="false">1 month</button>
+          <button class="chip" data-period="3month" aria-pressed="false">3 months</button>
+          <button class="chip" data-period="6month" aria-pressed="false">6 months</button>
+          <button class="chip" data-period="12month" aria-pressed="false">1 year</button>
+          <button class="chip" data-period="overall" aria-pressed="false">overall</button>
         </div>
       </div>
 
       <button id="start-btn">see my wrapped</button>
-      <div id="input-error"></div>
+      <div id="input-error" role="status" aria-live="polite"></div>
     </section>
 
     <!-- STORY SCREEN (LOADING + CARDS) -->
     <section class="screen" id="screen-story">
       <!-- Card 0: loading -->
-      <section class="card active" id="card-loading">
-        <lottie-player
-          class="card-lottie"
-          src="https://lottie.host/7a70c3c6-3a6c-46de-bd2a-ccf5ca3b0f5d/4fAVW5.json"
-          background="transparent"
-          speed="1"
-          loop
-          autoplay>
-        </lottie-player>
+      <section class="card active" id="card-loading" aria-label="Loading your recap">
+        <div class="card-motion" aria-hidden="true"></div>
         <div class="card-foreground">
           <div class="cf-kicker">hold on</div>
           <div class="cf-title">we're tuning your year</div>
@@ -463,15 +512,8 @@
       </section>
 
       <!-- Card 1: greeting -->
-      <section class="card" id="card-hello">
-        <lottie-player
-          class="card-lottie"
-          src="https://lottie.host/7a70c3c6-3a6c-46de-bd2a-ccf5ca3b0f5d/4fAVW5.json"
-          background="transparent"
-          speed="0.8"
-          loop
-          autoplay>
-        </lottie-player>
+      <section class="card" id="card-hello" role="button" tabindex="0" aria-label="Next card">
+        <div class="card-motion" aria-hidden="true"></div>
         <div class="card-foreground">
           <div class="cf-kicker">hey there</div>
           <div class="cf-title" id="hello-title-card">@user</div>
@@ -479,33 +521,19 @@
         </div>
       </section>
 
-      <!-- Card 2: total scrobbles -->
-      <section class="card" id="card-total">
-        <lottie-player
-          class="card-lottie"
-          src="https://lottie.host/1a3f5de9-1d17-4731-bc39-86a9a068e20d/e9O4QF.json"
-          background="transparent"
-          speed="1"
-          loop
-          autoplay>
-        </lottie-player>
+      <!-- Card 2: listening total -->
+      <section class="card" id="card-total" role="button" tabindex="0" aria-label="Next card">
+        <div class="card-motion" aria-hidden="true"></div>
         <div class="card-foreground">
           <div class="cf-kicker">you pressed play</div>
           <div class="cf-stat" id="total-value-card">0</div>
-          <div class="cf-caption" id="total-caption-card">tracks scrobbled.</div>
+          <div class="cf-caption" id="total-caption-card">different tracks.</div>
         </div>
       </section>
 
       <!-- Card 3: top track -->
-      <section class="card" id="card-track">
-        <lottie-player
-          class="card-lottie"
-          src="https://lottie.host/69e8cefb-7a9d-4a6a-8f18-5397fce55c30/q0pgtQ.json"
-          background="transparent"
-          speed="1"
-          loop
-          autoplay>
-        </lottie-player>
+      <section class="card" id="card-track" role="button" tabindex="0" aria-label="Next card">
+        <div class="card-motion" aria-hidden="true"></div>
         <div class="card-foreground">
           <div class="cf-kicker">one song ruled them all</div>
           <div class="cf-art">
@@ -517,55 +545,46 @@
       </section>
 
       <!-- Card 4: genres -->
-      <section class="card" id="card-genres">
-        <lottie-player
-          class="card-lottie"
-          src="https://lottie.host/8c706a69-ecdd-4a3c-89e4-4a29db6ad9c3/hJzlzM.json"
-          background="transparent"
-          speed="1"
-          loop
-          autoplay>
-        </lottie-player>
+      <section class="card" id="card-genres" role="button" tabindex="0" aria-label="Next card">
+        <div class="card-motion" aria-hidden="true"></div>
         <div class="card-foreground">
           <div class="cf-kicker">the sounds around you</div>
           <p class="cf-sub">your top genres stacked up like this:</p>
-          <div id="genre-stack"></div>
+          <div id="genre-stack" aria-live="polite"></div>
         </div>
       </section>
 
       <!-- Card 5: recap -->
       <section class="card" id="card-final">
-        <lottie-player
-          class="card-lottie"
-          src="https://lottie.host/7a70c3c6-3a6c-46de-bd2a-ccf5ca3b0f5d/4fAVW5.json"
-          background="transparent"
-          speed="0.8"
-          loop
-          autoplay>
-        </lottie-player>
+        <div class="card-motion" aria-hidden="true"></div>
         <div class="card-foreground">
           <div class="cf-kicker">that was your</div>
           <div class="cf-title" id="final-period-card">last few months</div>
           <p class="cf-sub" id="final-username-card">@user on last.fm</p>
         </div>
         <div class="story-footer">
-          <span class="story-link" id="change-user-link">change user</span>
-          <span class="story-link" id="replay-link">replay</span>
+          <span class="story-link" id="change-user-link" role="button" tabindex="0">change user</span>
+          <span class="story-link" id="replay-link" role="button" tabindex="0">replay</span>
         </div>
       </section>
     </section>
   </div>
 
   <script>
-    const DEFAULT_USERNAME = ""; // optional default
+    const DEFAULT_USERNAME = "";
+
+    const PLACEHOLDER_ART = `data:image/svg+xml,${encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff2c7d"/><stop offset="1" stop-color="#36e3ff"/></linearGradient></defs><rect width="400" height="400" fill="url(#g)" opacity="0.5"/><circle cx="200" cy="200" r="72" fill="none" stroke="#f9fafb" stroke-width="10" opacity="0.7"/></svg>'
+    )}`;
 
     const sceneInput = document.getElementById("screen-input");
     const sceneStory = document.getElementById("screen-story");
-
     const periodRow = document.getElementById("period-row");
     const usernameInput = document.getElementById("username");
     const startBtn = document.getElementById("start-btn");
     const inputError = document.getElementById("input-error");
+    const replayLink = document.getElementById("replay-link");
+    const changeUserLink = document.getElementById("change-user-link");
 
     const storyCards = [
       "card-loading",
@@ -576,11 +595,16 @@
       "card-final"
     ];
     let currentCardIndex = 0;
-
+    let isLoading = false;
     let currentUsername = "";
     let currentPeriod = "7day";
     let wrappedData = null;
     let genresData = null;
+
+    storyCards.forEach((id) => {
+      const card = document.getElementById(id);
+      if (card) card.inert = id !== "card-loading";
+    });
 
     function showScreen(which) {
       sceneInput.classList.toggle("active", which === "input");
@@ -588,166 +612,229 @@
     }
 
     function setActiveCard(id) {
-      storyCards.forEach(cid => {
+      storyCards.forEach((cid) => {
         const el = document.getElementById(cid);
         if (!el) return;
-        el.classList.toggle("active", cid === id);
+        const active = cid === id;
+        el.classList.toggle("active", active);
+        el.inert = !active;
       });
       currentCardIndex = storyCards.indexOf(id);
+      const activeCard = document.getElementById(id);
+      if (activeCard && id !== "card-loading" && id !== "card-final") {
+        activeCard.focus({ preventScroll: true });
+      }
     }
 
     function nextCard() {
-      if (currentCardIndex >= storyCards.length - 1) return;
-      const nextId = storyCards[currentCardIndex + 1];
-      setActiveCard(nextId);
+      if (isLoading || currentCardIndex >= storyCards.length - 1) return;
+      setActiveCard(storyCards[currentCardIndex + 1]);
     }
 
-    // period chips
-    periodRow.addEventListener("click", (e) => {
-      const chip = e.target.closest(".chip");
+    periodRow.addEventListener("click", (event) => {
+      const chip = event.target.closest(".chip");
       if (!chip) return;
-      periodRow.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
-      chip.classList.add("active");
+      periodRow.querySelectorAll(".chip").forEach((candidate) => {
+        const active = candidate === chip;
+        candidate.classList.toggle("active", active);
+        candidate.setAttribute("aria-pressed", String(active));
+      });
       currentPeriod = chip.dataset.period || "7day";
     });
 
-    // tap to advance cards (except final)
-    sceneStory.addEventListener("click", (e) => {
-      const card = e.target.closest(".card");
-      if (!card) return;
-      if (card.id === "card-final") return;
+    sceneStory.addEventListener("click", (event) => {
+      if (event.target.closest(".story-link")) return;
+      const card = event.target.closest(".card");
+      if (!card || card.id === "card-final") return;
       nextCard();
     });
 
-    document.getElementById("replay-link").addEventListener("click", (e) => {
-      e.stopPropagation();
-      if (!wrappedData) return;
-      setActiveCard("card-hello");
+    sceneStory.addEventListener("keydown", (event) => {
+      if (event.target.closest(".story-link")) return;
+      if (!["Enter", " ", "ArrowRight"].includes(event.key)) return;
+      const card = event.target.closest(".card");
+      if (!card || card.id === "card-final") return;
+      event.preventDefault();
+      nextCard();
     });
 
-    document.getElementById("change-user-link").addEventListener("click", (e) => {
-      e.stopPropagation();
-      showScreen("input");
+    function bindLink(element, action) {
+      element.addEventListener("click", (event) => {
+        event.stopPropagation();
+        action();
+      });
+      element.addEventListener("keydown", (event) => {
+        if (!["Enter", " "].includes(event.key)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        action();
+      });
+    }
+
+    bindLink(replayLink, () => {
+      if (wrappedData) setActiveCard("card-hello");
     });
+    bindLink(changeUserLink, () => showScreen("input"));
+
+    const countAnimations = new WeakMap();
 
     function countUp(element, target, duration = 800) {
-      const start = 0;
+      cancelAnimationFrame(countAnimations.get(element) || 0);
       const startTime = performance.now();
       function tick(now) {
-        const elapsed = now - startTime;
-        const t = Math.min(1, elapsed / duration);
-        const value = Math.round(start + (target - start) * t);
-        element.textContent = value.toLocaleString();
-        if (t < 1) requestAnimationFrame(tick);
+        const t = Math.min(1, (now - startTime) / duration);
+        element.textContent = Math.round(target * t).toLocaleString();
+        if (t < 1) {
+          countAnimations.set(element, requestAnimationFrame(tick));
+        }
       }
-      requestAnimationFrame(tick);
+      countAnimations.set(element, requestAnimationFrame(tick));
     }
 
     function applyWrappedToCards(data) {
       const user = data.username || currentUsername;
-      const periodLabel = data.periodLabel || "";
+      const label = data.periodLabel || "";
 
       document.getElementById("hello-title-card").textContent = `@${user}`;
       document.getElementById("hello-sub-card").textContent =
-        periodLabel ? `here's your ${periodLabel} on last.fm.` : "here's your time on last.fm.";
+        label ? `here's your ${label} on last.fm.` : "here's your time on last.fm.";
 
-      const total = Number(data.totalScrobbles) || 0;
+      const overall = data.period === "overall";
+      const total = overall
+        ? Number(data.totalScrobbles) || 0
+        : Number(data.totalTracks) || 0;
       const totalEl = document.getElementById("total-value-card");
       totalEl.textContent = "0";
       countUp(totalEl, total);
-
       document.getElementById("total-caption-card").textContent =
-        periodLabel ? `tracks scrobbled in ${periodLabel}.` : "tracks scrobbled.";
+        overall
+          ? "scrobbles, all time."
+          : label ? `different tracks in ${label}.` : "different tracks.";
 
       const topTrack = (data.topTracks || [])[0];
-      if (topTrack) {
-        const img = document.getElementById("toptrack-art");
-        img.src = topTrack.image || "";
-        img.alt = `${topTrack.name || "Track"} – ${topTrack.artist || ""}`;
-        document.getElementById("toptrack-title-card").textContent = topTrack.name || "Unknown track";
-        document.getElementById("toptrack-artist-card").textContent = topTrack.artist || "";
-      }
+      const art = document.getElementById("toptrack-art");
+      art.src = topTrack?.image || PLACEHOLDER_ART;
+      art.alt = topTrack
+        ? `${topTrack.name || "Track"} – ${topTrack.artist || ""}`
+        : "No cover art available";
+      document.getElementById("toptrack-title-card").textContent =
+        topTrack?.name || "No top track";
+      document.getElementById("toptrack-artist-card").textContent =
+        topTrack?.artist || "";
 
-      document.getElementById("final-period-card").textContent =
-        periodLabel || "your time";
-      document.getElementById("final-username-card").textContent =
-        `@${user} on last.fm`;
+      document.getElementById("final-period-card").textContent = label || "your time";
+      document.getElementById("final-username-card").textContent = `@${user} on last.fm`;
     }
 
-    /* function applyGenres(genres) {
+    function setGenreMessage(message) {
       const container = document.getElementById("genre-stack");
-      container.innerHTML = "";
-      if (!genres || !Array.isArray(genres.topGenres)) return;
+      container.replaceChildren();
+      const note = document.createElement("p");
+      note.className = "cf-sub";
+      note.textContent = message;
+      container.appendChild(note);
+    }
+
+    function applyGenres(data) {
+      const genres = Array.isArray(data?.topGenres) ? data.topGenres.slice(0, 5) : [];
+      if (!genres.length) {
+        setGenreMessage("genre tags aren't available right now.");
+        return;
+      }
 
       const gradients = [
         "linear-gradient(90deg,#ff2c7d,#36e3ff)",
         "linear-gradient(90deg,#36e3ff,#ffd33b)",
         "linear-gradient(90deg,#ffd33b,#ff2c7d)"
       ];
+      const container = document.getElementById("genre-stack");
+      container.replaceChildren();
 
-      genres.topGenres.forEach((g, idx) => {
+      genres.forEach((genre, index) => {
         const chip = document.createElement("div");
         chip.className = "genre-chip";
-        chip.style.backgroundImage = gradients[idx % gradients.length];
+        chip.style.backgroundImage = gradients[index % gradients.length];
         const span = document.createElement("span");
-        span.textContent = g.name;
+        span.textContent = genre.name || "unknown";
         chip.appendChild(span);
         container.appendChild(chip);
-        setTimeout(() => chip.classList.add("ready"), 90 * (idx + 1));
+        setTimeout(() => chip.classList.add("ready"), 90 * (index + 1));
       });
-    }*/
+    }
+
+    async function fetchGenres(artists) {
+      const response = await fetch("/api/wgenres", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ artists }),
+        signal: AbortSignal.timeout(12000)
+      });
+      if (!response.ok) throw new Error("wgenres_failed");
+      return response.json();
+    }
+
+    function loadGenres(artists) {
+      genresData = null;
+      setGenreMessage("still tuning your genres...");
+      fetchGenres(artists)
+        .then((data) => {
+          genresData = data;
+          applyGenres(data);
+        })
+        .catch(() => applyGenres(null));
+    }
 
     async function fetchWrapped(username, period) {
-      const url = `/api/wrapped?username=${encodeURIComponent(username)}&period=${encodeURIComponent(period)}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error("wrapped_failed");
-      return res.json();
+      const params = new URLSearchParams({ username, period });
+      const response = await fetch(`/api/wrapped?${params}`, {
+        signal: AbortSignal.timeout(15000)
+      });
+      if (!response.ok) throw new Error("wrapped_failed");
+      return response.json();
     }
 
-  /*  async function fetchGenres(username, period) {
-      const url = `/api/wgenres?username=${encodeURIComponent(username)}&period=${encodeURIComponent(period)}`;
-      const res = await fetch(url);
-      if (!res.ok) return null;
-      return res.json();
-    } */
+    async function startStory() {
+      inputError.textContent = "";
+      const name = (usernameInput.value || "").trim();
+      if (!name) {
+        inputError.textContent = "username is required.";
+        usernameInput.focus();
+        return;
+      }
 
-   async function startStory() {
-  inputError.textContent = "";
-  const name = (usernameInput.value || "").trim();
-  if (!name) {
-    inputError.textContent = "username is required.";
-    return;
-  }
+      currentUsername = name;
+      wrappedData = null;
+      genresData = null;
+      isLoading = true;
+      startBtn.disabled = true;
+      showScreen("story");
+      setActiveCard("card-loading");
 
-  currentUsername = name;
-
-  showScreen("story");
-  setActiveCard("card-loading");
-
-  try {
-    const wrapped = await fetchWrapped(currentUsername, currentPeriod);
-    wrappedData = wrapped;
-    applyWrappedToCards(wrappedData);
-
-    // TEMP: skip genres fetch; card-genres will just show placeholder text
-    // const genres = await fetchGenres(currentUsername, currentPeriod);
-    // if (genres) { genresData = genres; applyGenres(genresData); }
-
-    setTimeout(() => {
-      setActiveCard("card-hello");
-    }, 600);
-  } catch (err) {
-    console.error(err);
-    inputError.textContent = "couldn't load wrapped for that user/period.";
-    showScreen("input");
-  }
-}
+      try {
+        const wrapped = await fetchWrapped(currentUsername, currentPeriod);
+        wrappedData = wrapped;
+        applyWrappedToCards(wrappedData);
+        loadGenres(wrapped.topArtists || []);
+        setTimeout(() => {
+          isLoading = false;
+          setActiveCard("card-hello");
+        }, 600);
+      } catch (error) {
+        console.error("wrapped failed", error.message);
+        showScreen("input");
+        setActiveCard("card-loading");
+        inputError.textContent = "couldn't load wrapped for that user/period.";
+      } finally {
+        startBtn.disabled = false;
+      }
+    }
 
     startBtn.addEventListener("click", startStory);
+    usernameInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") startStory();
+    });
 
-    if (DEFAULT_USERNAME) {
-      usernameInput.value = DEFAULT_USERNAME;
-    }
+    if (DEFAULT_USERNAME) usernameInput.value = DEFAULT_USERNAME;
   </script>
 </body>
 </html>
